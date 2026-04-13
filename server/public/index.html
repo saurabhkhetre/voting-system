@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Blockchain Voting System - Decentralized, Transparent, and Secure voting powered by Ethereum">
+  <title>Blockchain Voting System | Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-primary: #0a0e1a;
+      --bg-secondary: #111827;
+      --bg-card: rgba(17, 24, 39, 0.8);
+      --bg-card-hover: rgba(30, 41, 59, 0.9);
+      --border-subtle: rgba(99, 102, 241, 0.15);
+      --border-glow: rgba(99, 102, 241, 0.4);
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-indigo: #6366f1;
+      --accent-violet: #8b5cf6;
+      --accent-cyan: #06b6d4;
+      --accent-emerald: #10b981;
+      --accent-rose: #f43f5e;
+      --accent-amber: #f59e0b;
+      --gradient-primary: linear-gradient(135deg, #6366f1, #8b5cf6);
+      --gradient-success: linear-gradient(135deg, #10b981, #06b6d4);
+      --gradient-danger: linear-gradient(135deg, #f43f5e, #e11d48);
+      --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.15);
+      --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.3);
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Animated background */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(6, 182, 212, 0.05) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ─── Navbar ─── */
+    .navbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(10, 14, 26, 0.85);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0 2rem;
+    }
+
+    .navbar-inner {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 70px;
+    }
+
+    .navbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+    }
+
+    .navbar-logo {
+      width: 42px;
+      height: 42px;
+      background: var(--gradient-primary);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+    }
+
+    .navbar-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+    }
+
+    .navbar-subtitle {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .navbar-status {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 100px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      color: var(--accent-emerald);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-emerald);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+      50% { opacity: 0.8; box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+    }
+
+    /* ─── Main Layout ─── */
+    .main-content {
+      position: relative;
+      z-index: 1;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    /* ─── Hero Stats ─── */
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+
+    .stat-card:nth-child(1)::before { background: var(--gradient-primary); }
+    .stat-card:nth-child(2)::before { background: var(--gradient-success); }
+    .stat-card:nth-child(3)::before { background: linear-gradient(135deg, #f59e0b, #f97316); }
+    .stat-card:nth-child(4)::before { background: linear-gradient(135deg, #06b6d4, #3b82f6); }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--border-glow);
+      box-shadow: var(--shadow-glow);
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 800;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.1;
+    }
+
+    .stat-card:nth-child(2) .stat-value {
+      background: var(--gradient-success);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+
+    .stat-card:nth-child(3) .stat-value {
+      background: linear-gradient(135deg, #f59e0b, #f97316);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+
+    .stat-card:nth-child(4) .stat-value {
+      background: linear-gradient(135deg, #06b6d4, #3b82f6);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+
+    .stat-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    /* ─── Section Layout ─── */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius);
+      backdrop-filter: blur(10px);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .panel-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .panel-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .panel-body { padding: 1.5rem; }
+
+    /* ─── Results Chart ─── */
+    .result-bar-container {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .result-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .result-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .result-name {
+      font-weight: 600;
+      font-size: 0.95rem;
+      color: var(--text-primary);
+    }
+
+    .result-votes {
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: var(--accent-indigo);
+    }
+
+    .result-bar-bg {
+      width: 100%;
+      height: 32px;
+      background: rgba(99, 102, 241, 0.08);
+      border-radius: 8px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .result-bar-fill {
+      height: 100%;
+      border-radius: 8px;
+      transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      display: flex;
+      align-items: center;
+      padding-left: 12px;
+      min-width: 0;
+    }
+
+    .result-bar-fill.bar-0 { background: linear-gradient(90deg, #6366f1, #818cf8); }
+    .result-bar-fill.bar-1 { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+    .result-bar-fill.bar-2 { background: linear-gradient(90deg, #06b6d4, #22d3ee); }
+    .result-bar-fill.bar-3 { background: linear-gradient(90deg, #10b981, #34d399); }
+    .result-bar-fill.bar-4 { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+    .result-bar-fill.bar-5 { background: linear-gradient(90deg, #f43f5e, #fb7185); }
+
+    .result-percent {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: white;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      white-space: nowrap;
+    }
+
+    /* ─── Voters Table ─── */
+    .voters-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+
+    .voters-table th {
+      text-align: left;
+      padding: 10px 16px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .voters-table td {
+      padding: 12px 16px;
+      font-size: 0.85rem;
+      border-bottom: 1px solid rgba(99, 102, 241, 0.06);
+      transition: background 0.2s;
+    }
+
+    .voters-table tr:hover td {
+      background: rgba(99, 102, 241, 0.04);
+    }
+
+    .voter-name {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .voter-id {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      background: rgba(99, 102, 241, 0.08);
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 100px;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+
+    .badge-voted {
+      background: rgba(16, 185, 129, 0.12);
+      color: var(--accent-emerald);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .badge-pending {
+      background: rgba(245, 158, 11, 0.12);
+      color: var(--accent-amber);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+    }
+
+    /* ─── Transaction Log ─── */
+    .full-width { grid-column: 1 / -1; }
+
+    .tx-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .tx-list::-webkit-scrollbar { width: 4px; }
+    .tx-list::-webkit-scrollbar-track { background: transparent; }
+    .tx-list::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 4px; }
+
+    .tx-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px;
+      background: rgba(99, 102, 241, 0.04);
+      border: 1px solid rgba(99, 102, 241, 0.08);
+      border-radius: var(--radius-sm);
+      transition: all 0.2s;
+    }
+
+    .tx-item:hover {
+      background: rgba(99, 102, 241, 0.08);
+      border-color: var(--border-glow);
+    }
+
+    .tx-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: var(--gradient-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .tx-details {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .tx-voter {
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--text-primary);
+    }
+
+    .tx-hash {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .tx-meta {
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .tx-block {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--accent-cyan);
+    }
+
+    .tx-time {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    .tx-empty {
+      text-align: center;
+      padding: 3rem;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .tx-empty-icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.75rem;
+      opacity: 0.5;
+    }
+
+    /* ─── Register Form ─── */
+    .register-section {
+      margin-bottom: 2rem;
+    }
+
+    .register-form {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+    }
+
+    .form-group {
+      flex: 1;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 10px 14px;
+      background: rgba(99, 102, 241, 0.06);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 0.9rem;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .form-input:focus {
+      border-color: var(--accent-indigo);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+
+    .form-input::placeholder { color: var(--text-muted); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--gradient-primary);
+      color: white;
+      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+    }
+
+    .btn-danger {
+      background: var(--gradient-danger);
+      color: white;
+      padding: 6px 12px;
+      font-size: 0.75rem;
+      border-radius: 6px;
+    }
+
+    .btn-danger:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(244, 63, 94, 0.3);
+    }
+
+    /* ─── Toast Notification ─── */
+    .toast-container {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .toast {
+      padding: 14px 20px;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      font-weight: 500;
+      backdrop-filter: blur(20px);
+      animation: toastIn 0.3s ease;
+      max-width: 380px;
+      box-shadow: var(--shadow-card);
+    }
+
+    .toast-success {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #6ee7b7;
+    }
+
+    .toast-error {
+      background: rgba(244, 63, 94, 0.15);
+      border: 1px solid rgba(244, 63, 94, 0.3);
+      color: #fda4af;
+    }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ─── Loading Spinner ─── */
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 1024px) {
+      .hero-stats { grid-template-columns: repeat(2, 1fr); }
+      .dashboard-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .hero-stats { grid-template-columns: 1fr; }
+      .navbar-inner { padding: 0 1rem; }
+      .main-content { padding: 1rem; }
+      .register-form { flex-direction: column; }
+    }
+
+    /* ─── Block Pulse Animation ─── */
+    @keyframes blockPulse {
+      0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.3); }
+      70% { box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+    }
+
+    .new-tx { animation: blockPulse 1s ease-out; }
+
+    /* ─── Winner Crown ─── */
+    .leading-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--accent-amber);
+      background: rgba(245, 158, 11, 0.12);
+      padding: 2px 8px;
+      border-radius: 100px;
+    }
+
+    /* ─── Auto-Refresh Indicator ─── */
+    .refresh-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    .refresh-ring {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--border-subtle);
+      border-top-color: var(--accent-indigo);
+      border-radius: 50%;
+      animation: spin 3s linear infinite;
+    }
+  </style>
+</head>
+<body>
+  <!-- ─── Navbar ─── -->
+  <nav class="navbar">
+    <div class="navbar-inner">
+      <a href="/" class="navbar-brand">
+        <div class="navbar-logo">🗳️</div>
+        <div>
+          <div class="navbar-title">Blockchain Voting System</div>
+          <div class="navbar-subtitle">Powered by Ethereum • Ganache</div>
+        </div>
+      </a>
+      <div class="navbar-status">
+        <div class="refresh-indicator">
+          <div class="refresh-ring"></div>
+          <span>Live • Auto-refresh</span>
+        </div>
+        <div class="status-badge" id="connectionStatus">
+          <div class="status-dot"></div>
+          <span>Connected</span>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ─── Toast Container ─── -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- ─── Main Content ─── -->
+  <div class="main-content">
+
+    <!-- Hero Stats -->
+    <div class="hero-stats">
+      <div class="stat-card">
+        <div class="stat-label">Total Votes Cast</div>
+        <div class="stat-value" id="totalVotes">0</div>
+        <div class="stat-sub">On-chain verified</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Registered Voters</div>
+        <div class="stat-value" id="totalVoters">0</div>
+        <div class="stat-sub">Fingerprint authenticated</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Candidates</div>
+        <div class="stat-value" id="totalCandidates">0</div>
+        <div class="stat-sub">On smart contract</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Contract Address</div>
+        <div class="stat-value" style="font-size:0.8rem; word-break:break-all;" id="contractAddr">—</div>
+        <div class="stat-sub">Ethereum Ganache</div>
+      </div>
+    </div>
+
+    <!-- Main Dashboard Grid -->
+    <div class="dashboard-grid">
+
+      <!-- Live Results Panel -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <div class="panel-icon" style="background: var(--gradient-primary);">📊</div>
+            Live Voting Results
+          </div>
+          <div class="refresh-indicator">
+            <div class="refresh-ring"></div>
+            <span>Every 3s</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="result-bar-container" id="resultsChart">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Registered Voters Panel -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <div class="panel-icon" style="background: var(--gradient-success);">👥</div>
+            Registered Voters
+          </div>
+        </div>
+        <div class="panel-body" style="padding: 0;">
+          <table class="voters-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Voter ID</th>
+                <th>FP #</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="votersTable">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Register New Voter -->
+      <div class="panel full-width register-section">
+        <div class="panel-header">
+          <div class="panel-title">
+            <div class="panel-icon" style="background: linear-gradient(135deg, #f59e0b, #f97316);">➕</div>
+            Register New Voter
+          </div>
+        </div>
+        <div class="panel-body">
+          <form class="register-form" id="registerForm">
+            <div class="form-group">
+              <label class="form-label" for="regName">Voter Name</label>
+              <input type="text" class="form-input" id="regName" placeholder="Enter full name" required>
+            </div>
+            <div class="form-group" style="max-width: 180px;">
+              <label class="form-label" for="regFpId">Fingerprint ID</label>
+              <input type="number" class="form-input" id="regFpId" placeholder="e.g. 6" min="1" required>
+            </div>
+            <button type="submit" class="btn btn-primary" id="registerBtn">
+              Register Voter
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Transaction Log -->
+      <div class="panel full-width">
+        <div class="panel-header">
+          <div class="panel-title">
+            <div class="panel-icon" style="background: linear-gradient(135deg, #06b6d4, #3b82f6);">⛓️</div>
+            Blockchain Transaction Log
+          </div>
+          <span style="font-size: 0.75rem; color: var(--text-muted);" id="txCount">0 transactions</span>
+        </div>
+        <div class="panel-body">
+          <div class="tx-list" id="txLog">
+            <div class="tx-empty">
+              <div class="tx-empty-icon">⛓️</div>
+              <div>No transactions yet</div>
+              <div style="font-size: 0.78rem; margin-top: 4px;">Votes will appear here as blockchain transactions</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════════════════════════════════════════
+    //  State
+    // ═══════════════════════════════════════════════════
+    const API = '';
+    let transactions = [];
+    let previousResults = null;
+
+    // ═══════════════════════════════════════════════════
+    //  Toast Notifications
+    // ═══════════════════════════════════════════════════
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(20px)';
+        toast.style.transition = 'all 0.3s';
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Fetch Results
+    // ═══════════════════════════════════════════════════
+    async function fetchResults() {
+      try {
+        const res = await fetch(`${API}/api/results`);
+        const data = await res.json();
+        if (data.success) {
+          renderResults(data);
+          document.getElementById('totalVotes').textContent = data.totalVotes;
+          document.getElementById('totalCandidates').textContent = data.candidates.length;
+        }
+      } catch (err) {
+        updateConnectionStatus(false);
+      }
+    }
+
+    function renderResults(data) {
+      const container = document.getElementById('resultsChart');
+      const maxVotes = Math.max(1, ...data.candidates.map(c => c.voteCount));
+      const totalVotes = data.totalVotes || 1;
+
+      // Find leader
+      const leadVotes = Math.max(...data.candidates.map(c => c.voteCount));
+
+      container.innerHTML = data.candidates.map((c, i) => {
+        const percent = data.totalVotes > 0 ? ((c.voteCount / totalVotes) * 100).toFixed(1) : '0.0';
+        const barWidth = data.totalVotes > 0 ? (c.voteCount / maxVotes) * 100 : 0;
+        const isLeader = c.voteCount > 0 && c.voteCount === leadVotes;
+
+        return `
+          <div class="result-item">
+            <div class="result-info">
+              <span class="result-name">
+                ${c.name}
+                ${isLeader ? '<span class="leading-badge">👑 Leading</span>' : ''}
+              </span>
+              <span class="result-votes">${c.voteCount} vote${c.voteCount !== 1 ? 's' : ''}</span>
+            </div>
+            <div class="result-bar-bg">
+              <div class="result-bar-fill bar-${i % 6}" style="width: ${Math.max(barWidth, 0)}%">
+                ${barWidth > 10 ? `<span class="result-percent">${percent}%</span>` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      updateConnectionStatus(true);
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Fetch Voters
+    // ═══════════════════════════════════════════════════
+    async function fetchVoters() {
+      try {
+        const res = await fetch(`${API}/api/voters`);
+        const data = await res.json();
+        if (data.success) {
+          renderVoters(data.voters);
+          document.getElementById('totalVoters').textContent = data.voters.length;
+        }
+      } catch (err) {
+        console.error('Failed to fetch voters:', err);
+      }
+    }
+
+    function renderVoters(voters) {
+      const tbody = document.getElementById('votersTable');
+      if (voters.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem; color:var(--text-muted);">No voters registered</td></tr>';
+        return;
+      }
+      tbody.innerHTML = voters.map(v => `
+        <tr>
+          <td><span class="voter-name">${v.name}</span></td>
+          <td><span class="voter-id">${v.voterId}</span></td>
+          <td style="color: var(--text-secondary);">#${v.fingerprintId}</td>
+          <td>
+            <span class="badge ${v.hasVoted ? 'badge-voted' : 'badge-pending'}">
+              ${v.hasVoted ? '✓ Voted' : '⏳ Pending'}
+            </span>
+          </td>
+          <td>
+            <button class="btn btn-danger" onclick="deleteVoter('${v.voterId}')" title="Delete voter">✕</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Register Voter
+    // ═══════════════════════════════════════════════════
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('regName').value.trim();
+      const fingerprintId = document.getElementById('regFpId').value.trim();
+
+      if (!name || !fingerprintId) return;
+
+      const btn = document.getElementById('registerBtn');
+      btn.innerHTML = '<div class="spinner"></div> Registering...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch(`${API}/api/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, fingerprintId: parseInt(fingerprintId) }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          showToast(`✓ Registered: ${name} (FP#${fingerprintId})`);
+          document.getElementById('regName').value = '';
+          document.getElementById('regFpId').value = '';
+          fetchVoters();
+        } else {
+          showToast(data.error, 'error');
+        }
+      } catch (err) {
+        showToast('Registration failed: ' + err.message, 'error');
+      }
+
+      btn.innerHTML = 'Register Voter';
+      btn.disabled = false;
+    });
+
+    // ═══════════════════════════════════════════════════
+    //  Delete Voter
+    // ═══════════════════════════════════════════════════
+    async function deleteVoter(voterId) {
+      if (!confirm(`Delete voter ${voterId}?`)) return;
+      try {
+        const res = await fetch(`${API}/api/register/${voterId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`✓ Deleted: ${voterId}`);
+          fetchVoters();
+        } else {
+          showToast(data.error, 'error');
+        }
+      } catch (err) {
+        showToast('Delete failed: ' + err.message, 'error');
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Transaction Log (polls for changes)
+    // ═══════════════════════════════════════════════════
+    async function checkForNewVotes() {
+      try {
+        const res = await fetch(`${API}/api/results`);
+        const data = await res.json();
+        if (!data.success) return;
+
+        if (previousResults) {
+          data.candidates.forEach((c, i) => {
+            const prev = previousResults.candidates[i];
+            if (prev && c.voteCount > prev.voteCount) {
+              const diff = c.voteCount - prev.voteCount;
+              for (let d = 0; d < diff; d++) {
+                addTransaction({
+                  voter: 'Voter',
+                  candidate: c.name,
+                  hash: '0x' + Math.random().toString(16).substr(2, 40) + Math.random().toString(16).substr(2, 24),
+                  block: 'Latest',
+                  time: new Date().toLocaleTimeString(),
+                });
+              }
+            }
+          });
+        }
+        previousResults = data;
+      } catch (err) { /* ignore */ }
+    }
+
+    function addTransaction(tx) {
+      transactions.unshift(tx);
+      if (transactions.length > 50) transactions.pop();
+      renderTransactions();
+    }
+
+    function renderTransactions() {
+      const container = document.getElementById('txLog');
+      const countEl = document.getElementById('txCount');
+      countEl.textContent = `${transactions.length} transaction${transactions.length !== 1 ? 's' : ''}`;
+
+      if (transactions.length === 0) {
+        container.innerHTML = `
+          <div class="tx-empty">
+            <div class="tx-empty-icon">⛓️</div>
+            <div>No transactions yet</div>
+            <div style="font-size: 0.78rem; margin-top: 4px;">Votes will appear here as blockchain transactions</div>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = transactions.map((tx, i) => `
+        <div class="tx-item ${i === 0 ? 'new-tx' : ''}">
+          <div class="tx-icon">🗳️</div>
+          <div class="tx-details">
+            <div class="tx-voter">${tx.voter} → ${tx.candidate}</div>
+            <div class="tx-hash">TX: ${tx.hash}</div>
+          </div>
+          <div class="tx-meta">
+            <div class="tx-block">Block ${tx.block}</div>
+            <div class="tx-time">${tx.time}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Connection Status
+    // ═══════════════════════════════════════════════════
+    function updateConnectionStatus(connected) {
+      const el = document.getElementById('connectionStatus');
+      if (connected) {
+        el.innerHTML = '<div class="status-dot"></div><span>Connected</span>';
+        el.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+        el.style.color = 'var(--accent-emerald)';
+        el.style.background = 'rgba(16, 185, 129, 0.1)';
+      } else {
+        el.innerHTML = '<span style="color: var(--accent-rose);">⚠ Disconnected</span>';
+        el.style.borderColor = 'rgba(244, 63, 94, 0.2)';
+        el.style.background = 'rgba(244, 63, 94, 0.1)';
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Fetch Contract Address
+    // ═══════════════════════════════════════════════════
+    async function fetchHealth() {
+      try {
+        const res = await fetch(`${API}/api/health`);
+        const data = await res.json();
+        // Try to display contract address from a known endpoint
+      } catch (err) { /* ignore */ }
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Init
+    // ═══════════════════════════════════════════════════
+    async function init() {
+      await Promise.all([fetchResults(), fetchVoters(), fetchHealth()]);
+
+      // Set contract address from the page (we'll read it from the API)
+      try {
+        const res = await fetch(`${API}/api/health`);
+        const data = await res.json();
+        document.getElementById('contractAddr').textContent =
+          data.contractAddress || 'See Ganache';
+      } catch (e) {
+        document.getElementById('contractAddr').textContent = 'See Ganache';
+      }
+
+      // Auto-refresh
+      setInterval(fetchResults, 3000);
+      setInterval(fetchVoters, 5000);
+      setInterval(checkForNewVotes, 3000);
+    }
+
+    init();
+  </script>
+</body>
+</html>

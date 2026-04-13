@@ -1,0 +1,13 @@
+{
+  "name": "voting-blockchain",
+  "version": "1.0.0",
+  "description": "Smart contract compilation and deployment",
+  "main": "deploy.js",
+  "scripts": {
+    "deploy": "node deploy.js"
+  },
+  "dependencies": {
+    "ethers": "^5.7.2",
+    "solc": "0.8.17"
+  }
+}

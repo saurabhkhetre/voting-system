@@ -1,0 +1,9 @@
+{
+  "voters": {
+    "fp_1": { "name": "Saurabh Khetre", "fingerprintId": 1 },
+    "fp_2": { "name": "Aarav Singh", "fingerprintId": 2 },
+    "fp_3": { "name": "Ananya Sharma", "fingerprintId": 3 },
+    "fp_4": { "name": "Rohan Patil", "fingerprintId": 4 },
+    "fp_5": { "name": "Meera Joshi", "fingerprintId": 5 }
+  }
+}
