@@ -4,6 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const { ethers } = require("ethers");
 const fs = require("fs");
+const crypto = require("crypto");
 
 // ═══════════════════════════════════════════════════════════════
 //  Configuration
@@ -11,6 +12,10 @@ const fs = require("fs");
 const PORT = process.env.PORT || 3000;
 const GANACHE_URL = process.env.GANACHE_URL || "http://127.0.0.1:7545";
 const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS;
+
+// Admin credentials
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "saurabh";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
 
 if (!CONTRACT_ADDRESS || CONTRACT_ADDRESS === "PASTE_YOUR_CONTRACT_ADDRESS_HERE") {
   console.error("Missing CONTRACT_ADDRESS in server/.env");
@@ -74,6 +79,33 @@ let VOTERS = loadVoters();
 const votedLocally = new Set();
 
 // ═══════════════════════════════════════════════════════════════
+//  Admin Session Management
+// ═══════════════════════════════════════════════════════════════
+const adminTokens = new Set();
+
+function generateToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+function requireAdmin(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ success: false, error: "Authentication required" });
+  }
+  const token = authHeader.split(" ")[1];
+  if (!adminTokens.has(token)) {
+    return res.status(401).json({ success: false, error: "Invalid or expired token" });
+  }
+  next();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Enrollment Queue (browser → server → ESP32)
+// ═══════════════════════════════════════════════════════════════
+let enrollmentQueue = [];
+let enrollmentIdCounter = 1;
+
+// ═══════════════════════════════════════════════════════════════
 //  Express App
 // ═══════════════════════════════════════════════════════════════
 const app = express();
@@ -99,15 +131,212 @@ app.get("/api/health", (req, res) => {
     contractAddress: CONTRACT_ADDRESS,
     ganacheUrl: GANACHE_URL,
     endpoints: [
+      "/api/admin/login",
       "/api/auth/fingerprint",
       "/api/register",
       "/api/voters",
       "/api/candidates",
       "/api/vote",
       "/api/results",
+      "/api/admin/enroll",
+      "/api/enroll/pending",
+      "/api/enroll/complete",
     ],
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+//  Admin Authentication
+// ═══════════════════════════════════════════════════════════════
+
+// ─── POST /api/admin/login ─────────────────────────────────────
+app.post("/api/admin/login", (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ success: false, error: "Username and password are required" });
+  }
+
+  if (username.toLowerCase() !== ADMIN_USERNAME.toLowerCase() || password !== ADMIN_PASSWORD) {
+    return res.status(401).json({ success: false, error: "Invalid credentials" });
+  }
+
+  const token = generateToken();
+  adminTokens.add(token);
+
+  console.log(`Admin '${username}' logged in`);
+
+  return res.json({
+    success: true,
+    token,
+    admin: { username: ADMIN_USERNAME, name: "Saurabh" },
+    message: "Admin login successful",
+  });
+});
+
+// ─── POST /api/admin/logout ────────────────────────────────────
+app.post("/api/admin/logout", requireAdmin, (req, res) => {
+  const token = req.headers.authorization.split(" ")[1];
+  adminTokens.delete(token);
+  return res.json({ success: true, message: "Logged out" });
+});
+
+// ─── GET /api/admin/verify ─────────────────────────────────────
+app.get("/api/admin/verify", requireAdmin, (req, res) => {
+  return res.json({ success: true, admin: { username: ADMIN_USERNAME, name: "Saurabh" } });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  Enrollment Queue (Admin triggers from browser, ESP32 executes)
+// ═══════════════════════════════════════════════════════════════
+
+// ─── POST /api/admin/enroll ────────────────────────────────────
+// Admin submits a new voter for enrollment (from browser)
+app.post("/api/admin/enroll", requireAdmin, (req, res) => {
+  const { name, userId } = req.body;
+
+  if (!name || !userId) {
+    return res.status(400).json({ success: false, error: "name and userId are required" });
+  }
+
+  // Check if there's already an active enrollment
+  const active = enrollmentQueue.find(e => e.status === "pending" || e.status === "enrolling");
+  if (active) {
+    return res.status(409).json({
+      success: false,
+      error: "Another enrollment is already in progress",
+      activeEnrollment: active,
+    });
+  }
+
+  const enrollment = {
+    id: enrollmentIdCounter++,
+    name: name.trim(),
+    userId: userId.trim(),
+    status: "pending", // pending → enrolling → completed / failed
+    fingerprintId: null,
+    createdAt: new Date().toISOString(),
+    completedAt: null,
+    error: null,
+  };
+
+  enrollmentQueue.push(enrollment);
+  console.log(`Enrollment queued: ${enrollment.name} (ID: ${enrollment.userId})`);
+
+  return res.json({
+    success: true,
+    enrollment,
+    message: "Enrollment request queued. Ask voter to place finger on sensor.",
+  });
+});
+
+// ─── GET /api/admin/enroll/:id/status ──────────────────────────
+// Browser polls this to check enrollment progress
+app.get("/api/admin/enroll/:id/status", requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id);
+  const enrollment = enrollmentQueue.find(e => e.id === id);
+
+  if (!enrollment) {
+    return res.status(404).json({ success: false, error: "Enrollment not found" });
+  }
+
+  return res.json({ success: true, enrollment });
+});
+
+// ─── DELETE /api/admin/enroll/:id ──────────────────────────────
+// Cancel a pending enrollment
+app.delete("/api/admin/enroll/:id", requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id);
+  const idx = enrollmentQueue.findIndex(e => e.id === id);
+
+  if (idx === -1) {
+    return res.status(404).json({ success: false, error: "Enrollment not found" });
+  }
+
+  enrollmentQueue[idx].status = "cancelled";
+  console.log(`Enrollment cancelled: ${enrollmentQueue[idx].name}`);
+
+  return res.json({ success: true, message: "Enrollment cancelled" });
+});
+
+// ─── GET /api/enroll/pending ───────────────────────────────────
+// ESP32 polls this endpoint to check for pending enrollments
+app.get("/api/enroll/pending", (req, res) => {
+  const pending = enrollmentQueue.find(e => e.status === "pending");
+
+  if (!pending) {
+    return res.json({ success: true, hasPending: false });
+  }
+
+  // Mark as "enrolling" so it won't be picked up again
+  pending.status = "enrolling";
+  console.log(`ESP32 picked up enrollment: ${pending.name}`);
+
+  return res.json({
+    success: true,
+    hasPending: true,
+    enrollment: {
+      id: pending.id,
+      name: pending.name,
+      userId: pending.userId,
+    },
+  });
+});
+
+// ─── POST /api/enroll/complete ─────────────────────────────────
+// ESP32 calls this after fingerprint enrollment is done
+app.post("/api/enroll/complete", (req, res) => {
+  const { enrollmentId, fingerprintId, success, error } = req.body;
+
+  if (!enrollmentId) {
+    return res.status(400).json({ success: false, error: "enrollmentId is required" });
+  }
+
+  const enrollment = enrollmentQueue.find(e => e.id === enrollmentId);
+  if (!enrollment) {
+    return res.status(404).json({ success: false, error: "Enrollment not found" });
+  }
+
+  if (success && fingerprintId) {
+    // Register the voter
+    const voterId = `fp_${fingerprintId}`;
+
+    // Check if fingerprint already used
+    if (VOTERS[voterId]) {
+      enrollment.status = "failed";
+      enrollment.error = `Fingerprint ID ${fingerprintId} already registered to ${VOTERS[voterId].name}`;
+      enrollment.completedAt = new Date().toISOString();
+      return res.json({ success: false, error: enrollment.error });
+    }
+
+    VOTERS[voterId] = { name: enrollment.name, fingerprintId: parseInt(fingerprintId) };
+    saveVoters(VOTERS);
+
+    enrollment.status = "completed";
+    enrollment.fingerprintId = parseInt(fingerprintId);
+    enrollment.completedAt = new Date().toISOString();
+
+    console.log(`Enrollment completed: ${enrollment.name} → FP#${fingerprintId}`);
+
+    return res.json({
+      success: true,
+      message: `Voter "${enrollment.name}" registered with fingerprint ${fingerprintId}`,
+      voter: { voterId, name: enrollment.name, fingerprintId: parseInt(fingerprintId) },
+    });
+  } else {
+    enrollment.status = "failed";
+    enrollment.error = error || "Enrollment failed on device";
+    enrollment.completedAt = new Date().toISOString();
+
+    console.log(`Enrollment failed: ${enrollment.name} — ${enrollment.error}`);
+
+    return res.json({ success: false, error: enrollment.error });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  Existing Endpoints (fingerprint auth, voting, etc.)
+// ═══════════════════════════════════════════════════════════════
 
 // ─── POST /api/auth/fingerprint ─────────────────────────────────
 // ESP32 sends the fingerprint ID after a successful scan
@@ -374,18 +603,27 @@ async function start() {
     console.log("==============================================");
     console.log("  Blockchain Voting System - Backend");
     console.log("  🔐 Fingerprint Authentication Enabled");
+    console.log("  👤 Admin Panel: Browser-based");
     console.log(`  Server:   http://localhost:${PORT}`);
     console.log(`  Ganache:  ${GANACHE_URL}`);
     console.log(`  Contract: ${CONTRACT_ADDRESS}`);
+    console.log(`  Admin:    ${ADMIN_USERNAME} / ***`);
     console.log("==============================================");
     console.log("\nEndpoints:");
-    console.log("  POST /api/auth/fingerprint  - Authenticate via fingerprint");
-    console.log("  POST /api/register          - Register a new voter");
+    console.log("  POST /api/admin/login        - Admin login");
+    console.log("  POST /api/admin/logout       - Admin logout");
+    console.log("  GET  /api/admin/verify       - Verify admin token");
+    console.log("  POST /api/admin/enroll       - Queue fingerprint enrollment");
+    console.log("  GET  /api/admin/enroll/:id    - Check enrollment status");
+    console.log("  GET  /api/enroll/pending     - ESP32 polls for enrollments");
+    console.log("  POST /api/enroll/complete    - ESP32 reports enrollment done");
+    console.log("  POST /api/auth/fingerprint   - Authenticate via fingerprint");
+    console.log("  POST /api/register           - Register a new voter");
     console.log("  DELETE /api/register/:id     - Delete a voter");
-    console.log("  GET  /api/voters            - List all registered voters");
-    console.log("  GET  /api/candidates        - List candidates");
-    console.log("  POST /api/vote              - Cast a vote");
-    console.log("  GET  /api/results           - Get live results\n");
+    console.log("  GET  /api/voters             - List all registered voters");
+    console.log("  GET  /api/candidates         - List candidates");
+    console.log("  POST /api/vote               - Cast a vote");
+    console.log("  GET  /api/results            - Get live results\n");
 
     // Show registered voters on startup
     const voterCount = Object.keys(VOTERS).length;

@@ -43,8 +43,8 @@ const int   SERVER_PORT   = 3000;
 #define FP_RX 16
 #define FP_TX 17
 
-// Admin enrollment button (hold on boot to enter admin mode)
-#define ADMIN_BTN_PIN 0  // BOOT button on most ESP32 boards
+// Admin fingerprint is stored at this slot in the sensor
+#define ADMIN_FP_ID 127  // Reserved slot for admin fingerprint
 // ──────────────────────────────────────────────────────────────
 
 // ─── Display & Touch ─────────────────────────────────────────
@@ -69,8 +69,14 @@ enum Screen {
   SCREEN_ENROLL_WAIT,     // Admin: waiting for finger to enroll
   SCREEN_ENROLL_REMOVE,   // Admin: remove and place finger again
   SCREEN_ENROLL_AGAIN,    // Admin: place same finger again
-  SCREEN_ENROLL_DONE      // Admin: enrollment success
+  SCREEN_ENROLL_DONE,     // Admin: enrollment success
+  SCREEN_ADMIN_MENU,      // Admin: main menu
+  SCREEN_ADMIN_NAME_ENTRY,// Admin: enter voter name
+  SCREEN_ADMIN_SETUP,     // First boot: setup admin fingerprint
+  SCREEN_SERVER_ENROLL    // Server-triggered enrollment (from browser)
 };
+
+bool adminExists = false;
 
 Screen currentScreen = SCREEN_FINGERPRINT;
 
@@ -99,11 +105,23 @@ int    resultVoteCount = 0;
 int enrollId = -1;
 String enrollName = "";
 
+// Admin name entry state
+char nameBuffer[20] = "";
+int nameLen = 0;
+int kbPage = 0;  // 0=ABC, 1=abc, 2=123
+
+// Server enrollment state
+int serverEnrollId = -1;
+String serverEnrollName = "";
+String serverEnrollUserId = "";
+
 // Timing
 unsigned long welcomeShownTime = 0;
 unsigned long resultShownTime = 0;
 unsigned long lastScanTime = 0;
 unsigned long lastResultRefresh = 0;
+unsigned long lastServerPoll = 0;
+const unsigned long SERVER_POLL_INTERVAL = 3000; // Poll every 3 seconds
 unsigned long lastFpAnimTime = 0;
 int fpAnimFrame = 0;
 
@@ -800,6 +818,489 @@ void handleErrorTouch(int tx, int ty) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//   SCREEN: Admin Menu (after admin fingerprint auth)
+// ═══════════════════════════════════════════════════════════════
+
+void drawAdminMenu() {
+  tft.fillScreen(BG_COLOR);
+  tft.fillRect(0, 0, SCREEN_W, 4, ACCENT_PURPLE);
+
+  drawCenteredText("ADMIN PANEL", 14, ACCENT_PURPLE, 2);
+  tft.drawFastHLine(30, 34, SCREEN_W - 60, DIVIDER_COLOR);
+  drawCenteredText("Authenticated via fingerprint", 40, TEXT_MUTED, 1);
+
+  // Button 1: Register New Voter
+  tft.fillRoundRect(20, 65, SCREEN_W - 40, 50, 10, CARD_COLOR);
+  tft.drawRoundRect(20, 65, SCREEN_W - 40, 50, 10, SUCCESS_COLOR);
+  tft.fillRoundRect(30, 75, 30, 30, 6, SUCCESS_COLOR);
+  tft.setTextColor(TEXT_COLOR); tft.setTextSize(2);
+  tft.setCursor(37, 81); tft.print("+");
+  tft.setTextColor(TEXT_COLOR); tft.setTextSize(2);
+  tft.setCursor(70, 78); tft.print("Register Voter");
+  tft.setTextColor(TEXT_DIM); tft.setTextSize(1);
+  tft.setCursor(70, 98); tft.print("Enroll fingerprint + name");
+
+  // Button 2: View Voters
+  tft.fillRoundRect(20, 125, SCREEN_W - 40, 50, 10, CARD_COLOR);
+  tft.drawRoundRect(20, 125, SCREEN_W - 40, 50, 10, PRIMARY_COLOR);
+  tft.fillRoundRect(30, 135, 30, 30, 6, PRIMARY_COLOR);
+  tft.setTextColor(TEXT_COLOR); tft.setTextSize(2);
+  tft.setCursor(35, 141); tft.print("?");
+  tft.setTextColor(TEXT_COLOR); tft.setTextSize(2);
+  tft.setCursor(70, 138); tft.print("View Results");
+  tft.setTextColor(TEXT_DIM); tft.setTextSize(1);
+  tft.setCursor(70, 158); tft.print("Live voting results");
+
+  // Button 3: Exit
+  drawButton(80, 190, 160, 35, "EXIT TO VOTING", ERROR_COLOR, TEXT_COLOR);
+}
+
+void handleAdminMenuTouch(int tx, int ty) {
+  // Register New Voter
+  if (isTouched(tx, ty, 20, 65, SCREEN_W - 40, 50)) {
+    currentScreen = SCREEN_ADMIN_NAME_ENTRY;
+    nameLen = 0;
+    nameBuffer[0] = '\0';
+    kbPage = 0;
+    drawNameEntryScreen();
+    return;
+  }
+  // View Results
+  if (isTouched(tx, ty, 20, 125, SCREEN_W - 40, 50)) {
+    // Fetch and show results (reuse existing)
+    selectedCandidate = -1;
+    txHash = "Admin View";
+    currentScreen = SCREEN_RESULT;
+    fetchAndDrawResults();
+    return;
+  }
+  // Exit
+  if (isTouched(tx, ty, 80, 190, 160, 35)) {
+    resetForNewVoter();
+    return;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//   SCREEN: Name Entry (On-screen keyboard for voter name)
+// ═══════════════════════════════════════════════════════════════
+
+void drawNameEntryScreen() {
+  tft.fillScreen(BG_COLOR);
+  tft.fillRect(0, 0, SCREEN_W, 3, SUCCESS_COLOR);
+
+  drawCenteredText("ENTER VOTER NAME", 8, SUCCESS_COLOR, 2);
+
+  // Name display box
+  tft.fillRoundRect(10, 30, SCREEN_W - 20, 28, 6, CARD_COLOR);
+  tft.drawRoundRect(10, 30, SCREEN_W - 20, 28, 6, PRIMARY_COLOR);
+  tft.setTextColor(TEXT_COLOR); tft.setTextSize(2);
+  tft.setCursor(18, 36);
+  tft.print(nameBuffer);
+  tft.setTextColor(PRIMARY_COLOR);
+  tft.print("_");
+
+  // Keyboard layout
+  const char* rows[3];
+  if (kbPage == 0) {
+    rows[0] = "ABCDEFGHIJ";
+    rows[1] = "KLMNOPQRST";
+    rows[2] = "UVWXYZ .-";
+  } else if (kbPage == 1) {
+    rows[0] = "abcdefghij";
+    rows[1] = "klmnopqrst";
+    rows[2] = "uvwxyz .-";
+  } else {
+    rows[0] = "1234567890";
+    rows[1] = "          ";
+    rows[2] = "         ";
+  }
+
+  int keyW = 28;
+  int keyH = 28;
+  int startY = 65;
+  int gap = 4;
+
+  for (int r = 0; r < 3; r++) {
+    int rowLen = strlen(rows[r]);
+    int startX = (SCREEN_W - rowLen * (keyW + gap)) / 2;
+    for (int c = 0; c < rowLen; c++) {
+      int kx = startX + c * (keyW + gap);
+      int ky = startY + r * (keyH + gap);
+      char ch = rows[r][c];
+      if (ch == ' ') {
+        tft.fillRoundRect(kx, ky, keyW, keyH, 4, CARD_COLOR);
+        tft.setTextColor(TEXT_DIM); tft.setTextSize(1);
+        tft.setCursor(kx + 4, ky + 10); tft.print("SP");
+      } else {
+        tft.fillRoundRect(kx, ky, keyW, keyH, 4, CARD_COLOR);
+        tft.setTextColor(TEXT_COLOR); tft.setTextSize(2);
+        tft.setCursor(kx + 8, ky + 6); tft.print(ch);
+      }
+    }
+  }
+
+  // Bottom buttons: DEL | ABC/abc/123 | NEXT
+  int btnY = startY + 3 * (keyH + gap) + 5;
+  drawButton(10, btnY, 70, 30, "DEL", ERROR_COLOR, TEXT_COLOR);
+
+  const char* modeLabel = (kbPage == 0) ? "abc" : (kbPage == 1) ? "123" : "ABC";
+  drawButton(90, btnY, 70, 30, modeLabel, ACCENT_PURPLE, TEXT_COLOR);
+
+  drawButton(170, btnY, 140, 30, "NEXT >>", SUCCESS_COLOR, TEXT_COLOR);
+}
+
+void handleNameEntryTouch(int tx, int ty) {
+  int keyW = 28;
+  int keyH = 28;
+  int startY = 65;
+  int gap = 4;
+
+  const char* rows[3];
+  if (kbPage == 0) {
+    rows[0] = "ABCDEFGHIJ";
+    rows[1] = "KLMNOPQRST";
+    rows[2] = "UVWXYZ .-";
+  } else if (kbPage == 1) {
+    rows[0] = "abcdefghij";
+    rows[1] = "klmnopqrst";
+    rows[2] = "uvwxyz .-";
+  } else {
+    rows[0] = "1234567890";
+    rows[1] = "          ";
+    rows[2] = "         ";
+  }
+
+  // Check keyboard keys
+  for (int r = 0; r < 3; r++) {
+    int rowLen = strlen(rows[r]);
+    int startX = (SCREEN_W - rowLen * (keyW + gap)) / 2;
+    for (int c = 0; c < rowLen; c++) {
+      int kx = startX + c * (keyW + gap);
+      int ky = startY + r * (keyH + gap);
+      if (isTouched(tx, ty, kx, ky, keyW, keyH)) {
+        char ch = rows[r][c];
+        if (nameLen < 18) {
+          nameBuffer[nameLen++] = ch;
+          nameBuffer[nameLen] = '\0';
+          drawNameEntryScreen();
+        }
+        return;
+      }
+    }
+  }
+
+  int btnY = startY + 3 * (keyH + gap) + 5;
+
+  // DEL button
+  if (isTouched(tx, ty, 10, btnY, 70, 30)) {
+    if (nameLen > 0) {
+      nameBuffer[--nameLen] = '\0';
+      drawNameEntryScreen();
+    }
+    return;
+  }
+
+  // Mode toggle (ABC/abc/123)
+  if (isTouched(tx, ty, 90, btnY, 70, 30)) {
+    kbPage = (kbPage + 1) % 3;
+    drawNameEntryScreen();
+    return;
+  }
+
+  // NEXT button — proceed to fingerprint enrollment
+  if (isTouched(tx, ty, 170, btnY, 140, 30)) {
+    if (nameLen < 2) {
+      // Name too short
+      tft.fillRoundRect(10, 30, SCREEN_W - 20, 28, 6, ERROR_COLOR);
+      drawCenteredText("Name too short!", 38, TEXT_COLOR, 1);
+      delay(1000);
+      drawNameEntryScreen();
+      return;
+    }
+    enrollName = String(nameBuffer);
+    int nextSlot = getNextEnrollSlot();
+    if (nextSlot > 0) {
+      startEnrollmentWithName(nextSlot, enrollName);
+    } else {
+      drawErrorScreen("Sensor memory full!");
+      currentScreen = SCREEN_ERROR;
+    }
+    return;
+  }
+}
+
+// Enrollment that also registers the name on the server
+void startEnrollmentWithName(int id, String name) {
+  enrollId = id;
+  enrollName = name;
+  currentScreen = SCREEN_ENROLL_WAIT;
+  drawEnrollWaitScreen();
+
+  Serial.printf("Enrolling voter '%s' at slot %d\n", name.c_str(), id);
+
+  unsigned long startTime = millis();
+  int p = -1;
+
+  // Step 1: Capture first image
+  while (p != FINGERPRINT_OK) {
+    p = finger.getImage();
+    if (p == FINGERPRINT_OK) {
+      Serial.println("Image taken (1)");
+    } else if (p == FINGERPRINT_NOFINGER) {
+      uint16_t ttx, tty;
+      if (tft.getTouch(&ttx, &tty)) {
+        if (isTouched(ttx, tty, 10, SCREEN_H - 28, 100, 22)) {
+          currentScreen = SCREEN_ADMIN_MENU;
+          drawAdminMenu();
+          return;
+        }
+      }
+      if (millis() - startTime > 30000) {
+        drawEnrollDoneScreen(false, "Timeout - no finger");
+        currentScreen = SCREEN_ENROLL_DONE;
+        return;
+      }
+      delay(100);
+    } else {
+      delay(100);
+    }
+  }
+
+  p = finger.image2Tz(1);
+  if (p != FINGERPRINT_OK) {
+    drawEnrollDoneScreen(false, "Image processing failed");
+    currentScreen = SCREEN_ENROLL_DONE;
+    return;
+  }
+
+  // Step 2: Remove finger
+  currentScreen = SCREEN_ENROLL_REMOVE;
+  drawEnrollRemoveScreen();
+  delay(1000);
+  p = 0;
+  while (p != FINGERPRINT_NOFINGER) {
+    p = finger.getImage();
+    delay(100);
+  }
+
+  // Step 3: Place same finger again
+  currentScreen = SCREEN_ENROLL_AGAIN;
+  drawEnrollAgainScreen();
+  p = -1;
+  startTime = millis();
+  while (p != FINGERPRINT_OK) {
+    p = finger.getImage();
+    if (p == FINGERPRINT_NOFINGER) {
+      if (millis() - startTime > 30000) {
+        drawEnrollDoneScreen(false, "Timeout");
+        currentScreen = SCREEN_ENROLL_DONE;
+        return;
+      }
+      delay(100);
+    } else if (p != FINGERPRINT_OK) {
+      delay(100);
+    }
+  }
+
+  p = finger.image2Tz(2);
+  if (p != FINGERPRINT_OK) {
+    drawEnrollDoneScreen(false, "Image processing failed");
+    currentScreen = SCREEN_ENROLL_DONE;
+    return;
+  }
+
+  // Step 4: Create model
+  p = finger.createModel();
+  if (p != FINGERPRINT_OK) {
+    drawEnrollDoneScreen(false, "Fingers did not match");
+    currentScreen = SCREEN_ENROLL_DONE;
+    return;
+  }
+
+  // Step 5: Store model
+  p = finger.storeModel(id);
+  if (p != FINGERPRINT_OK) {
+    drawEnrollDoneScreen(false, "Storage failed");
+    currentScreen = SCREEN_ENROLL_DONE;
+    return;
+  }
+
+  Serial.printf("Fingerprint stored in slot %d\n", id);
+
+  // Step 6: Register on server
+  tft.fillScreen(BG_COLOR);
+  drawCenteredText("Registering on server...", 110, TEXT_DIM, 2);
+
+  HTTPClient http;
+  http.begin(serverUrl("/api/register"));
+  http.addHeader("Content-Type", "application/json");
+
+  StaticJsonDocument<256> doc;
+  doc["fingerprintId"] = id;
+  doc["name"] = name;
+  String body;
+  serializeJson(doc, body);
+
+  int httpCode = http.POST(body);
+  String response = http.getString();
+  http.end();
+
+  if (httpCode == 200) {
+    Serial.printf("Voter '%s' registered on server!\n", name.c_str());
+    drawEnrollDoneScreen(true, "");
+    // Override the done screen to show the name
+    tft.fillRoundRect(30, 148, SCREEN_W - 60, 20, 4, CARD_COLOR);
+    drawCenteredText(name.c_str(), 151, GOLD_COLOR, 1);
+  } else {
+    Serial.printf("Server registration failed: %d\n", httpCode);
+    drawEnrollDoneScreen(true, "");  // FP stored OK, server might have issue
+    tft.fillRoundRect(30, 168, SCREEN_W - 60, 12, 4, CARD_COLOR);
+    drawCenteredText("Server reg failed - use web", 170, WARNING_COLOR, 1);
+  }
+  currentScreen = SCREEN_ENROLL_DONE;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//   SCREEN: Admin Setup (first boot — enroll admin fingerprint)
+// ═══════════════════════════════════════════════════════════════
+
+void drawAdminSetupScreen() {
+  tft.fillScreen(BG_COLOR);
+  tft.fillRect(0, 0, SCREEN_W, 4, GOLD_COLOR);
+
+  drawCenteredText("FIRST TIME SETUP", 14, GOLD_COLOR, 2);
+  tft.drawFastHLine(30, 34, SCREEN_W - 60, DIVIDER_COLOR);
+
+  drawCenteredText("No admin registered!", 50, WARNING_COLOR, 1);
+  drawCenteredText("Register your admin", 75, TEXT_COLOR, 2);
+  drawCenteredText("fingerprint now", 97, TEXT_COLOR, 2);
+
+  // Fingerprint icon
+  int cx = SCREEN_W / 2;
+  int cy = 150;
+  tft.drawCircle(cx, cy, 25, GOLD_COLOR);
+  tft.drawCircle(cx, cy, 23, GOLD_COLOR);
+  tft.fillCircle(cx, cy, 3, ACCENT_CYAN);
+
+  drawCenteredText("Place finger on sensor", 190, TEXT_DIM, 1);
+  drawCenteredText("Hold steady...", 205, TEXT_MUTED, 1);
+}
+
+void enrollAdmin() {
+  drawAdminSetupScreen();
+  currentScreen = SCREEN_ADMIN_SETUP;
+
+  Serial.println("ADMIN SETUP: Enrolling admin fingerprint at slot 127");
+
+  unsigned long startTime = millis();
+  int p = -1;
+
+  // Step 1: Wait for finger
+  while (p != FINGERPRINT_OK) {
+    p = finger.getImage();
+    if (p == FINGERPRINT_NOFINGER) {
+      if (millis() - startTime > 60000) {
+        drawErrorScreen("Timeout - no finger");
+        currentScreen = SCREEN_ERROR;
+        return;
+      }
+      delay(100);
+    } else if (p != FINGERPRINT_OK) {
+      delay(100);
+    }
+  }
+
+  p = finger.image2Tz(1);
+  if (p != FINGERPRINT_OK) {
+    drawErrorScreen("Image processing failed");
+    currentScreen = SCREEN_ERROR;
+    return;
+  }
+
+  // Step 2: Remove finger
+  tft.fillScreen(BG_COLOR);
+  tft.fillRect(0, 0, SCREEN_W, 4, GOLD_COLOR);
+  drawCenteredText("Step 1 captured!", 80, SUCCESS_COLOR, 2);
+  drawCenteredText("Remove finger, then", 120, TEXT_COLOR, 2);
+  drawCenteredText("place it again", 142, TEXT_COLOR, 2);
+
+  delay(1000);
+  p = 0;
+  while (p != FINGERPRINT_NOFINGER) {
+    p = finger.getImage();
+    delay(100);
+  }
+
+  // Step 3: Place again
+  tft.fillScreen(BG_COLOR);
+  tft.fillRect(0, 0, SCREEN_W, 4, GOLD_COLOR);
+  drawCenteredText("Place SAME finger", 80, TEXT_COLOR, 2);
+  drawCenteredText("again on sensor", 105, TEXT_COLOR, 2);
+
+  p = -1;
+  startTime = millis();
+  while (p != FINGERPRINT_OK) {
+    p = finger.getImage();
+    if (p == FINGERPRINT_NOFINGER) {
+      if (millis() - startTime > 30000) {
+        drawErrorScreen("Timeout");
+        currentScreen = SCREEN_ERROR;
+        return;
+      }
+      delay(100);
+    } else if (p != FINGERPRINT_OK) {
+      delay(100);
+    }
+  }
+
+  p = finger.image2Tz(2);
+  if (p != FINGERPRINT_OK) {
+    drawErrorScreen("Image processing failed");
+    currentScreen = SCREEN_ERROR;
+    return;
+  }
+
+  p = finger.createModel();
+  if (p != FINGERPRINT_OK) {
+    drawErrorScreen("Fingers did not match");
+    currentScreen = SCREEN_ERROR;
+    return;
+  }
+
+  p = finger.storeModel(ADMIN_FP_ID);
+  if (p != FINGERPRINT_OK) {
+    drawErrorScreen("Storage failed");
+    currentScreen = SCREEN_ERROR;
+    return;
+  }
+
+  // Success!
+  adminExists = true;
+  Serial.println("Admin fingerprint enrolled successfully!");
+
+  tft.fillScreen(BG_COLOR);
+  tft.fillRect(0, 0, SCREEN_W, 4, SUCCESS_COLOR);
+
+  tft.fillCircle(SCREEN_W / 2, 70, 28, SUCCESS_COLOR);
+  tft.setTextColor(BG_COLOR); tft.setTextSize(3);
+  tft.setCursor(SCREEN_W / 2 - 12, 57); tft.print("OK");
+
+  drawCenteredText("ADMIN REGISTERED!", 115, SUCCESS_COLOR, 2);
+  drawCenteredText("You can now manage voters", 145, TEXT_DIM, 1);
+  drawCenteredText("by placing your finger", 160, TEXT_DIM, 1);
+
+  delay(3000);
+  resetForNewVoter();
+}
+
+// Check if admin fingerprint exists in sensor
+bool checkAdminExists() {
+  uint8_t p = finger.loadModel(ADMIN_FP_ID);
+  return (p == FINGERPRINT_OK);
+}
+
+// ═══════════════════════════════════════════════════════════════
 //   SCREEN: Enrollment (Admin Mode — Enhanced)
 // ═══════════════════════════════════════════════════════════════
 
@@ -1085,14 +1586,258 @@ void startEnrollment(int id) {
 
 // Find next available slot for enrollment
 int getNextEnrollSlot() {
-  // Check slots 1-127 for an empty one
-  for (int i = 1; i <= 127; i++) {
+  // Check slots 1-126 for an empty one (127 is reserved for admin)
+  for (int i = 1; i < ADMIN_FP_ID; i++) {
     uint8_t p = finger.loadModel(i);
     if (p != FINGERPRINT_OK) {
       return i;  // Empty slot
     }
   }
   return -1;  // All full
+}
+
+// ═══════════════════════════════════════════════════════════════
+//   SERVER-TRIGGERED ENROLLMENT (Browser Admin Panel → ESP32)
+// ═══════════════════════════════════════════════════════════════
+
+void pollServerForEnrollment() {
+  unsigned long now = millis();
+  if (now - lastServerPoll < SERVER_POLL_INTERVAL) return;
+  lastServerPoll = now;
+
+  HTTPClient http;
+  http.begin(serverUrl("/api/enroll/pending"));
+  http.setTimeout(3000);
+  int httpCode = http.GET();
+  String response = http.getString();
+  http.end();
+
+  if (httpCode != 200) return;
+
+  StaticJsonDocument<512> doc;
+  DeserializationError err = deserializeJson(doc, response);
+  if (err) return;
+
+  bool hasPending = doc["hasPending"].as<bool>();
+  if (!hasPending) return;
+
+  // We have a pending enrollment from the browser!
+  serverEnrollId = doc["enrollment"]["id"].as<int>();
+  serverEnrollName = doc["enrollment"]["name"].as<String>();
+  serverEnrollUserId = doc["enrollment"]["userId"].as<String>();
+
+  Serial.printf("Server enrollment request: %s (ID: %s, enrollment #%d)\n",
+                serverEnrollName.c_str(), serverEnrollUserId.c_str(), serverEnrollId);
+
+  // Start the server-triggered enrollment
+  currentScreen = SCREEN_SERVER_ENROLL;
+  executeServerEnrollment();
+}
+
+void drawServerEnrollScreen() {
+  tft.fillScreen(BG_COLOR);
+  tft.fillRect(0, 0, SCREEN_W, 4, GOLD_COLOR);
+
+  drawCenteredText("ADMIN ENROLLMENT", 12, GOLD_COLOR, 2);
+  tft.drawFastHLine(30, 32, SCREEN_W - 60, DIVIDER_COLOR);
+  drawCenteredText("Requested from browser", 38, TEXT_MUTED, 1);
+
+  // Voter info card
+  tft.fillRoundRect(20, 55, SCREEN_W - 40, 40, 8, CARD_COLOR);
+  tft.drawRoundRect(20, 55, SCREEN_W - 40, 40, 8, ACCENT_CYAN);
+  drawCenteredText(serverEnrollName.c_str(), 62, TEXT_COLOR, 2);
+  String idStr = "ID: " + serverEnrollUserId;
+  drawCenteredText(idStr.c_str(), 82, TEXT_DIM, 1);
+
+  // Fingerprint icon
+  int cx = SCREEN_W / 2;
+  int cy = 140;
+  tft.drawCircle(cx, cy, 30, GOLD_COLOR);
+  tft.drawCircle(cx, cy, 28, GOLD_COLOR);
+  for (int i = -12; i <= 12; i += 5) {
+    int halfW = sqrt(max(0, 15 * 15 - i * i));
+    tft.drawFastHLine(cx - halfW, cy + i, halfW * 2, TEXT_DIM);
+  }
+  tft.fillCircle(cx, cy, 3, ACCENT_CYAN);
+
+  drawCenteredText("Place finger on sensor", 182, TEXT_COLOR, 2);
+  drawCenteredText("Hold steady...", 204, TEXT_DIM, 1);
+
+  drawButton(10, SCREEN_H - 28, 100, 22, "CANCEL", ERROR_COLOR, TEXT_COLOR);
+}
+
+void executeServerEnrollment() {
+  // Find next available slot
+  int slot = getNextEnrollSlot();
+  if (slot < 0) {
+    reportEnrollmentComplete(false, -1, "Sensor memory full");
+    drawErrorScreen("Sensor memory full!");
+    currentScreen = SCREEN_ERROR;
+    return;
+  }
+
+  enrollId = slot;
+  enrollName = serverEnrollName;
+  drawServerEnrollScreen();
+
+  Serial.printf("Server enrollment: enrolling '%s' at slot %d\n", serverEnrollName.c_str(), slot);
+
+  unsigned long startTime = millis();
+  int p = -1;
+
+  // Step 1: Capture first image
+  while (p != FINGERPRINT_OK) {
+    p = finger.getImage();
+    if (p == FINGERPRINT_OK) {
+      Serial.println("Server enroll: Image taken (1)");
+    } else if (p == FINGERPRINT_NOFINGER) {
+      // Check for cancel touch
+      uint16_t ttx, tty;
+      if (tft.getTouch(&ttx, &tty)) {
+        if (isTouched(ttx, tty, 10, SCREEN_H - 28, 100, 22)) {
+          reportEnrollmentComplete(false, -1, "Cancelled on device");
+          resetForNewVoter();
+          return;
+        }
+      }
+      if (millis() - startTime > 60000) {
+        reportEnrollmentComplete(false, -1, "Timeout - no finger detected");
+        drawErrorScreen("Timeout!");
+        currentScreen = SCREEN_ERROR;
+        return;
+      }
+      delay(100);
+    } else {
+      delay(100);
+    }
+  }
+
+  p = finger.image2Tz(1);
+  if (p != FINGERPRINT_OK) {
+    reportEnrollmentComplete(false, -1, "Image processing failed");
+    drawErrorScreen("Image processing failed");
+    currentScreen = SCREEN_ERROR;
+    return;
+  }
+
+  // Step 2: Remove finger
+  tft.fillScreen(BG_COLOR);
+  tft.fillRect(0, 0, SCREEN_W, 4, GOLD_COLOR);
+  drawCenteredText("Step 1 captured!", 80, SUCCESS_COLOR, 2);
+  drawCenteredText("Remove finger, then", 120, TEXT_COLOR, 2);
+  drawCenteredText("place it again", 142, TEXT_COLOR, 2);
+
+  delay(1000);
+  p = 0;
+  while (p != FINGERPRINT_NOFINGER) {
+    p = finger.getImage();
+    delay(100);
+  }
+
+  // Step 3: Place same finger again
+  tft.fillScreen(BG_COLOR);
+  tft.fillRect(0, 0, SCREEN_W, 4, GOLD_COLOR);
+  drawCenteredText("Place SAME finger", 80, TEXT_COLOR, 2);
+  drawCenteredText("again on sensor", 105, TEXT_COLOR, 2);
+  drawCenteredText("for " + serverEnrollName, 140, ACCENT_CYAN, 1);
+
+  p = -1;
+  startTime = millis();
+  while (p != FINGERPRINT_OK) {
+    p = finger.getImage();
+    if (p == FINGERPRINT_NOFINGER) {
+      if (millis() - startTime > 30000) {
+        reportEnrollmentComplete(false, -1, "Timeout on second scan");
+        drawErrorScreen("Timeout!");
+        currentScreen = SCREEN_ERROR;
+        return;
+      }
+      delay(100);
+    } else if (p != FINGERPRINT_OK) {
+      delay(100);
+    }
+  }
+
+  p = finger.image2Tz(2);
+  if (p != FINGERPRINT_OK) {
+    reportEnrollmentComplete(false, -1, "Image processing failed");
+    drawErrorScreen("Image processing failed");
+    currentScreen = SCREEN_ERROR;
+    return;
+  }
+
+  // Step 4: Create model
+  p = finger.createModel();
+  if (p != FINGERPRINT_OK) {
+    reportEnrollmentComplete(false, -1, "Fingers did not match");
+    drawErrorScreen("Fingers did not match!");
+    currentScreen = SCREEN_ERROR;
+    return;
+  }
+
+  // Step 5: Store model
+  p = finger.storeModel(slot);
+  if (p != FINGERPRINT_OK) {
+    reportEnrollmentComplete(false, -1, "Storage failed");
+    drawErrorScreen("Storage failed!");
+    currentScreen = SCREEN_ERROR;
+    return;
+  }
+
+  Serial.printf("Server enrollment: Fingerprint stored in slot %d\n", slot);
+
+  // Step 6: Report success to server (server will register the voter)
+  reportEnrollmentComplete(true, slot, "");
+
+  // Show success on TFT
+  tft.fillScreen(BG_COLOR);
+  tft.fillRect(0, 0, SCREEN_W, 4, SUCCESS_COLOR);
+
+  int cx = SCREEN_W / 2;
+  tft.fillCircle(cx, 60, 28, SUCCESS_COLOR);
+  tft.fillCircle(cx, 60, 24, BG_COLOR);
+  tft.fillCircle(cx, 60, 22, SUCCESS_COLOR);
+  tft.setTextColor(BG_COLOR); tft.setTextSize(2);
+  tft.setCursor(cx - 12, 53); tft.print("OK");
+
+  drawCenteredText("ENROLLED!", 100, SUCCESS_COLOR, 2);
+  drawCenteredText(serverEnrollName.c_str(), 125, GOLD_COLOR, 2);
+  String fpMsg = "Fingerprint ID: " + String(slot);
+  drawCenteredText(fpMsg.c_str(), 155, TEXT_DIM, 1);
+  drawCenteredText("Registered via admin panel", 175, TEXT_MUTED, 1);
+
+  drawButton(60, 200, 200, 30, "BACK TO VOTING", PRIMARY_COLOR, TEXT_COLOR);
+  currentScreen = SCREEN_ENROLL_DONE;
+}
+
+void reportEnrollmentComplete(bool success, int fpId, String errorMsg) {
+  HTTPClient http;
+  http.begin(serverUrl("/api/enroll/complete"));
+  http.addHeader("Content-Type", "application/json");
+
+  StaticJsonDocument<256> doc;
+  doc["enrollmentId"] = serverEnrollId;
+  doc["fingerprintId"] = fpId;
+  doc["success"] = success;
+  if (!success) {
+    doc["error"] = errorMsg;
+  }
+
+  String body;
+  serializeJson(doc, body);
+
+  int httpCode = http.POST(body);
+  if (httpCode == 200) {
+    Serial.println("Enrollment completion reported to server");
+  } else {
+    Serial.printf("Failed to report enrollment: HTTP %d\n", httpCode);
+  }
+  http.end();
+
+  // Reset server enrollment state
+  serverEnrollId = -1;
+  serverEnrollName = "";
+  serverEnrollUserId = "";
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1257,9 +2002,6 @@ void setup() {
   Serial.begin(115200);
   Serial.println("\n=== Blockchain Voting System (Fingerprint Auth) ===\n");
 
-  // Admin button setup
-  pinMode(ADMIN_BTN_PIN, INPUT_PULLUP);
-
   // Init display
   tft.init();
   tft.setRotation(1);  // Landscape
@@ -1272,18 +2014,15 @@ void setup() {
   // Connect WiFi
   connectWiFi();
 
-  // Check if BOOT button is held → Enter enrollment mode
-  if (digitalRead(ADMIN_BTN_PIN) == LOW) {
-    Serial.println("ADMIN MODE: Enrollment");
-    int nextSlot = getNextEnrollSlot();
-    if (nextSlot > 0) {
-      startEnrollment(nextSlot);
-      return;
-    } else {
-      drawErrorScreen("Sensor memory full!");
-      currentScreen = SCREEN_ERROR;
-      return;
-    }
+  // Check if admin fingerprint exists
+  adminExists = checkAdminExists();
+  Serial.printf("Admin fingerprint: %s\n", adminExists ? "EXISTS" : "NOT FOUND");
+
+  if (!adminExists) {
+    // First time setup — enroll admin fingerprint
+    Serial.println("No admin found! Starting admin setup...");
+    enrollAdmin();
+    return;
   }
 
   // Show fingerprint scan screen
@@ -1331,14 +2070,24 @@ void loop() {
     // Animate the pulse
     animateFingerprintPulse();
 
+    // Poll server for browser-triggered enrollments
+    pollServerForEnrollment();
+
     // Check fingerprint every 200ms
     unsigned long now = millis();
     if (now - lastScanTime >= 200) {
       lastScanTime = now;
       int fpId = checkFingerprint();
       if (fpId > 0) {
-        // Valid fingerprint found
-        authenticateFingerprint(fpId);
+        if (fpId == ADMIN_FP_ID) {
+          // Admin fingerprint detected — show admin menu
+          Serial.println("Admin authenticated!");
+          currentScreen = SCREEN_ADMIN_MENU;
+          drawAdminMenu();
+        } else {
+          // Regular voter fingerprint
+          authenticateFingerprint(fpId);
+        }
         return;
       } else if (fpId == -2) {
         // Finger detected but not recognized
@@ -1397,10 +2146,17 @@ void loop() {
         handleErrorTouch(tx, ty);
         break;
       case SCREEN_ENROLL_DONE:
-        // "Back to voting" button
+        // "Back to voting" or "Back to admin"
         if (isTouched(tx, ty, 60, 200, 200, 30)) {
-          resetForNewVoter();
+          currentScreen = SCREEN_ADMIN_MENU;
+          drawAdminMenu();
         }
+        break;
+      case SCREEN_ADMIN_MENU:
+        handleAdminMenuTouch(tx, ty);
+        break;
+      case SCREEN_ADMIN_NAME_ENTRY:
+        handleNameEntryTouch(tx, ty);
         break;
       default:
         break;

@@ -3,37 +3,46 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Blockchain Voting System - Decentralized, Transparent, and Secure voting powered by Ethereum">
-  <title>Blockchain Voting System | Dashboard</title>
+  <meta name="description" content="Blockchain Voting System Admin Panel - Manage voters, monitor results, and enroll fingerprints">
+  <title>Admin Panel | Blockchain Voting System</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg-primary: #0a0e1a;
-      --bg-secondary: #111827;
-      --bg-card: rgba(17, 24, 39, 0.8);
-      --bg-card-hover: rgba(30, 41, 59, 0.9);
-      --border-subtle: rgba(99, 102, 241, 0.15);
-      --border-glow: rgba(99, 102, 241, 0.4);
-      --text-primary: #f1f5f9;
-      --text-secondary: #94a3b8;
-      --text-muted: #64748b;
+      --bg-primary: #06080f;
+      --bg-secondary: #0d1117;
+      --bg-card: rgba(13, 17, 23, 0.7);
+      --bg-card-solid: #0d1117;
+      --bg-card-hover: rgba(22, 27, 34, 0.9);
+      --bg-glass: rgba(13, 17, 23, 0.45);
+      --border-subtle: rgba(99, 102, 241, 0.12);
+      --border-glow: rgba(99, 102, 241, 0.35);
+      --border-glass: rgba(255, 255, 255, 0.06);
+      --text-primary: #f0f6fc;
+      --text-secondary: #8b949e;
+      --text-muted: #484f58;
       --accent-indigo: #6366f1;
       --accent-violet: #8b5cf6;
-      --accent-cyan: #06b6d4;
+      --accent-cyan: #22d3ee;
       --accent-emerald: #10b981;
       --accent-rose: #f43f5e;
       --accent-amber: #f59e0b;
-      --gradient-primary: linear-gradient(135deg, #6366f1, #8b5cf6);
+      --gradient-primary: linear-gradient(135deg, #6366f1, #8b5cf6, #a78bfa);
       --gradient-success: linear-gradient(135deg, #10b981, #06b6d4);
       --gradient-danger: linear-gradient(135deg, #f43f5e, #e11d48);
-      --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.15);
-      --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.3);
+      --gradient-warm: linear-gradient(135deg, #f59e0b, #f97316);
+      --gradient-mesh: radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+                       radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
+                       radial-gradient(ellipse at 60% 80%, rgba(6, 182, 212, 0.04) 0%, transparent 50%);
+      --shadow-glow: 0 0 40px rgba(99, 102, 241, 0.12);
+      --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.4);
+      --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.5);
       --radius: 16px;
       --radius-sm: 10px;
+      --radius-xs: 6px;
     }
 
     body {
@@ -44,37 +53,267 @@
       overflow-x: hidden;
     }
 
-    /* Animated background */
     body::before {
       content: '';
       position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background:
-        radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
-        radial-gradient(ellipse at 50% 80%, rgba(6, 182, 212, 0.05) 0%, transparent 50%);
+      inset: 0;
+      background: var(--gradient-mesh);
       pointer-events: none;
       z-index: 0;
     }
+
+    /* ─── Animated Background Orbs ─── */
+    .bg-orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.4;
+      pointer-events: none;
+      z-index: 0;
+      animation: orbFloat 20s ease-in-out infinite;
+    }
+
+    .bg-orb-1 { width: 400px; height: 400px; background: rgba(99, 102, 241, 0.08); top: -100px; left: -100px; }
+    .bg-orb-2 { width: 300px; height: 300px; background: rgba(139, 92, 246, 0.06); bottom: -50px; right: -50px; animation-delay: -7s; }
+    .bg-orb-3 { width: 250px; height: 250px; background: rgba(6, 182, 212, 0.05); top: 50%; left: 50%; animation-delay: -14s; }
+
+    @keyframes orbFloat {
+      0%, 100% { transform: translate(0, 0); }
+      33% { transform: translate(30px, -30px); }
+      66% { transform: translate(-20px, 20px); }
+    }
+
+    /* ═══════════════════════════════════════════════════
+       LOGIN SCREEN
+       ═══════════════════════════════════════════════════ */
+
+    .login-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      position: relative;
+      z-index: 1;
+      padding: 1rem;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--bg-glass);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border: 1px solid var(--border-glass);
+      border-radius: 24px;
+      padding: 3rem 2.5rem;
+      box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255,255,255,0.04);
+      animation: cardAppear 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes cardAppear {
+      from { opacity: 0; transform: translateY(30px) scale(0.96); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .login-logo {
+      width: 72px; height: 72px;
+      margin: 0 auto 1.5rem;
+      background: var(--gradient-primary);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      box-shadow: 0 0 40px rgba(99, 102, 241, 0.25);
+      animation: logoPulse 3s ease-in-out infinite;
+    }
+
+    @keyframes logoPulse {
+      0%, 100% { box-shadow: 0 0 40px rgba(99, 102, 241, 0.25); }
+      50% { box-shadow: 0 0 60px rgba(99, 102, 241, 0.4); }
+    }
+
+    .login-title {
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: 800;
+      margin-bottom: 0.25rem;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .login-subtitle {
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 2rem;
+      letter-spacing: 0.05em;
+    }
+
+    .form-group { margin-bottom: 1.25rem; }
+
+    .form-label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 12px 16px;
+      background: rgba(99, 102, 241, 0.04);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 0.95rem;
+      outline: none;
+      transition: all 0.25s ease;
+    }
+
+    .form-input:focus {
+      border-color: var(--accent-indigo);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12), 0 0 20px rgba(99, 102, 241, 0.06);
+      background: rgba(99, 102, 241, 0.07);
+    }
+
+    .form-input::placeholder { color: var(--text-muted); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      white-space: nowrap;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .btn-primary {
+      background: var(--gradient-primary);
+      color: white;
+      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+      width: 100%;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(99, 102, 241, 0.4);
+    }
+
+    .btn-primary:active { transform: translateY(0); }
+
+    .btn-sm {
+      padding: 8px 16px;
+      font-size: 0.78rem;
+      border-radius: var(--radius-xs);
+    }
+
+    .btn-danger-outline {
+      background: transparent;
+      color: var(--accent-rose);
+      border: 1px solid rgba(244, 63, 94, 0.25);
+    }
+
+    .btn-danger-outline:hover {
+      background: rgba(244, 63, 94, 0.1);
+      border-color: var(--accent-rose);
+    }
+
+    .btn-success {
+      background: var(--gradient-success);
+      color: white;
+      box-shadow: 0 4px 20px rgba(16, 185, 129, 0.25);
+    }
+
+    .btn-success:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(16, 185, 129, 0.35);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .btn-ghost:hover {
+      background: rgba(99, 102, 241, 0.06);
+      color: var(--text-primary);
+    }
+
+    .login-error {
+      background: rgba(244, 63, 94, 0.1);
+      border: 1px solid rgba(244, 63, 94, 0.2);
+      color: #fda4af;
+      padding: 10px 14px;
+      border-radius: var(--radius-xs);
+      font-size: 0.82rem;
+      margin-bottom: 1rem;
+      display: none;
+      animation: shake 0.4s ease;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-6px); }
+      75% { transform: translateX(6px); }
+    }
+
+    .login-footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    /* ═══════════════════════════════════════════════════
+       ADMIN DASHBOARD
+       ═══════════════════════════════════════════════════ */
+
+    .dashboard { display: none; position: relative; z-index: 1; }
 
     /* ─── Navbar ─── */
     .navbar {
       position: sticky;
       top: 0;
       z-index: 100;
-      background: rgba(10, 14, 26, 0.85);
-      backdrop-filter: blur(20px);
+      background: rgba(6, 8, 15, 0.8);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
       border-bottom: 1px solid var(--border-subtle);
       padding: 0 2rem;
     }
 
     .navbar-inner {
-      max-width: 1400px;
+      max-width: 1440px;
       margin: 0 auto;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      height: 70px;
+      height: 64px;
     }
 
     .navbar-brand {
@@ -85,38 +324,26 @@
     }
 
     .navbar-logo {
-      width: 42px;
-      height: 42px;
+      width: 38px; height: 38px;
       background: var(--gradient-primary);
-      border-radius: 12px;
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
-      box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+      font-size: 18px;
+      box-shadow: 0 0 20px rgba(99, 102, 241, 0.25);
     }
 
-    .navbar-title {
-      font-size: 1.2rem;
-      font-weight: 700;
-      color: var(--text-primary);
-      letter-spacing: -0.02em;
-    }
+    .navbar-title { font-size: 1.05rem; font-weight: 800; color: var(--text-primary); letter-spacing: -0.02em; }
+    .navbar-subtitle { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; }
 
-    .navbar-subtitle {
-      font-size: 0.7rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-    }
-
-    .navbar-status {
+    .navbar-right {
       display: flex;
       align-items: center;
-      gap: 20px;
+      gap: 16px;
     }
 
-    .status-badge {
+    .admin-badge {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -124,65 +351,93 @@
       border-radius: 100px;
       font-size: 0.75rem;
       font-weight: 600;
-      background: rgba(16, 185, 129, 0.1);
-      border: 1px solid rgba(16, 185, 129, 0.2);
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      color: var(--accent-indigo);
+    }
+
+    .admin-avatar {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: var(--gradient-primary);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 800; color: white;
+    }
+
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.7rem;
       color: var(--accent-emerald);
     }
 
-    .status-dot {
-      width: 8px;
-      height: 8px;
+    .live-dot {
+      width: 8px; height: 8px;
       border-radius: 50%;
       background: var(--accent-emerald);
-      animation: pulse-dot 2s ease-in-out infinite;
+      animation: livePulse 2s ease-in-out infinite;
     }
 
-    @keyframes pulse-dot {
+    @keyframes livePulse {
       0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-      50% { opacity: 0.8; box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+      50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
     }
 
-    /* ─── Main Layout ─── */
+    .btn-logout {
+      background: transparent;
+      border: 1px solid rgba(244, 63, 94, 0.2);
+      color: var(--accent-rose);
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .btn-logout:hover {
+      background: rgba(244, 63, 94, 0.1);
+      border-color: var(--accent-rose);
+    }
+
+    /* ─── Main Content ─── */
     .main-content {
-      position: relative;
-      z-index: 1;
-      max-width: 1400px;
+      max-width: 1440px;
       margin: 0 auto;
-      padding: 2rem;
+      padding: 1.5rem 2rem 3rem;
     }
 
-    /* ─── Hero Stats ─── */
-    .hero-stats {
+    /* ─── Stats Row ─── */
+    .stats-row {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 1.25rem;
-      margin-bottom: 2rem;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
     }
 
     .stat-card {
       background: var(--bg-card);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius);
-      padding: 1.5rem;
+      padding: 1.25rem 1.5rem;
       backdrop-filter: blur(10px);
-      transition: all 0.3s ease;
       position: relative;
       overflow: hidden;
+      transition: all 0.3s ease;
     }
 
     .stat-card::before {
       content: '';
       position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
-      border-radius: var(--radius) var(--radius) 0 0;
+      top: 0; left: 0; right: 0;
+      height: 2px;
     }
 
     .stat-card:nth-child(1)::before { background: var(--gradient-primary); }
     .stat-card:nth-child(2)::before { background: var(--gradient-success); }
-    .stat-card:nth-child(3)::before { background: linear-gradient(135deg, #f59e0b, #f97316); }
+    .stat-card:nth-child(3)::before { background: var(--gradient-warm); }
     .stat-card:nth-child(4)::before { background: linear-gradient(135deg, #06b6d4, #3b82f6); }
 
     .stat-card:hover {
@@ -192,54 +447,33 @@
     }
 
     .stat-label {
-      font-size: 0.75rem;
-      font-weight: 600;
+      font-size: 0.68rem;
+      font-weight: 700;
       color: var(--text-muted);
       text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 0.5rem;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.4rem;
     }
 
     .stat-value {
-      font-size: 2rem;
-      font-weight: 800;
-      background: var(--gradient-primary);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      font-size: 1.8rem;
+      font-weight: 900;
       line-height: 1.1;
     }
 
-    .stat-card:nth-child(2) .stat-value {
-      background: var(--gradient-success);
-      -webkit-background-clip: text;
-      background-clip: text;
-    }
+    .stat-card:nth-child(1) .stat-value { background: var(--gradient-primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .stat-card:nth-child(2) .stat-value { background: var(--gradient-success); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .stat-card:nth-child(3) .stat-value { background: var(--gradient-warm); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .stat-card:nth-child(4) .stat-value { background: linear-gradient(135deg, #06b6d4, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; font-size: 0.7rem; word-break: break-all; }
 
-    .stat-card:nth-child(3) .stat-value {
-      background: linear-gradient(135deg, #f59e0b, #f97316);
-      -webkit-background-clip: text;
-      background-clip: text;
-    }
+    .stat-sub { font-size: 0.68rem; color: var(--text-muted); margin-top: 0.2rem; }
 
-    .stat-card:nth-child(4) .stat-value {
-      background: linear-gradient(135deg, #06b6d4, #3b82f6);
-      -webkit-background-clip: text;
-      background-clip: text;
-    }
-
-    .stat-sub {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      margin-top: 0.25rem;
-    }
-
-    /* ─── Section Layout ─── */
+    /* ─── Dashboard Grid ─── */
     .dashboard-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 1.5rem;
-      margin-bottom: 2rem;
+      gap: 1.25rem;
+      margin-bottom: 1.25rem;
     }
 
     .panel {
@@ -254,7 +488,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 1.25rem 1.5rem;
+      padding: 1rem 1.25rem;
       border-bottom: 1px solid var(--border-subtle);
     }
 
@@ -262,72 +496,50 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      font-size: 1rem;
+      font-size: 0.9rem;
       font-weight: 700;
-      color: var(--text-primary);
     }
 
     .panel-icon {
-      width: 32px;
-      height: 32px;
+      width: 30px; height: 30px;
       border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 16px;
+      font-size: 14px;
     }
 
-    .panel-body { padding: 1.5rem; }
+    .panel-body { padding: 1.25rem; }
 
-    /* ─── Results Chart ─── */
-    .result-bar-container {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-    }
+    .full-width { grid-column: 1 / -1; }
 
-    .result-item {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
+    /* ─── Results Bars ─── */
+    .result-list { display: flex; flex-direction: column; gap: 0.85rem; }
 
-    .result-info {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
+    .result-item { display: flex; flex-direction: column; gap: 5px; }
 
-    .result-name {
-      font-weight: 600;
-      font-size: 0.95rem;
-      color: var(--text-primary);
-    }
+    .result-info { display: flex; justify-content: space-between; align-items: center; }
 
-    .result-votes {
-      font-weight: 700;
-      font-size: 0.9rem;
-      color: var(--accent-indigo);
-    }
+    .result-name { font-weight: 600; font-size: 0.88rem; }
+
+    .result-votes { font-weight: 700; font-size: 0.82rem; color: var(--accent-indigo); }
 
     .result-bar-bg {
       width: 100%;
-      height: 32px;
-      background: rgba(99, 102, 241, 0.08);
-      border-radius: 8px;
+      height: 28px;
+      background: rgba(99, 102, 241, 0.06);
+      border-radius: 6px;
       overflow: hidden;
       position: relative;
     }
 
     .result-bar-fill {
       height: 100%;
-      border-radius: 8px;
+      border-radius: 6px;
       transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-      position: relative;
       display: flex;
       align-items: center;
-      padding-left: 12px;
-      min-width: 0;
+      padding-left: 10px;
     }
 
     .result-bar-fill.bar-0 { background: linear-gradient(90deg, #6366f1, #818cf8); }
@@ -338,24 +550,32 @@
     .result-bar-fill.bar-5 { background: linear-gradient(90deg, #f43f5e, #fb7185); }
 
     .result-percent {
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       font-weight: 700;
       color: white;
       text-shadow: 0 1px 3px rgba(0,0,0,0.3);
-      white-space: nowrap;
+    }
+
+    .leading-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: var(--accent-amber);
+      background: rgba(245, 158, 11, 0.12);
+      padding: 2px 6px;
+      border-radius: 100px;
+      margin-left: 6px;
     }
 
     /* ─── Voters Table ─── */
-    .voters-table {
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 0;
-    }
+    .voters-table { width: 100%; border-collapse: separate; border-spacing: 0; }
 
     .voters-table th {
       text-align: left;
-      padding: 10px 16px;
-      font-size: 0.7rem;
+      padding: 8px 14px;
+      font-size: 0.65rem;
       font-weight: 700;
       color: var(--text-muted);
       text-transform: uppercase;
@@ -364,259 +584,205 @@
     }
 
     .voters-table td {
-      padding: 12px 16px;
-      font-size: 0.85rem;
-      border-bottom: 1px solid rgba(99, 102, 241, 0.06);
-      transition: background 0.2s;
+      padding: 10px 14px;
+      font-size: 0.82rem;
+      border-bottom: 1px solid rgba(99, 102, 241, 0.05);
+      transition: background 0.15s;
     }
 
-    .voters-table tr:hover td {
-      background: rgba(99, 102, 241, 0.04);
-    }
+    .voters-table tr:hover td { background: rgba(99, 102, 241, 0.03); }
 
-    .voter-name {
-      font-weight: 600;
-      color: var(--text-primary);
-    }
+    .voter-name { font-weight: 600; }
 
     .voter-id {
       font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 0.78rem;
+      font-size: 0.72rem;
       color: var(--text-secondary);
-      background: rgba(99, 102, 241, 0.08);
-      padding: 2px 8px;
+      background: rgba(99, 102, 241, 0.06);
+      padding: 2px 6px;
       border-radius: 4px;
     }
 
     .badge {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      padding: 4px 10px;
+      gap: 4px;
+      padding: 3px 8px;
       border-radius: 100px;
-      font-size: 0.7rem;
+      font-size: 0.65rem;
       font-weight: 700;
     }
 
-    .badge-voted {
-      background: rgba(16, 185, 129, 0.12);
-      color: var(--accent-emerald);
-      border: 1px solid rgba(16, 185, 129, 0.2);
+    .badge-voted { background: rgba(16, 185, 129, 0.1); color: var(--accent-emerald); border: 1px solid rgba(16, 185, 129, 0.2); }
+    .badge-pending { background: rgba(245, 158, 11, 0.1); color: var(--accent-amber); border: 1px solid rgba(245, 158, 11, 0.2); }
+
+    /* ─── Enrollment Section ─── */
+    .enroll-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+    .enroll-form .form-group { flex: 1; min-width: 150px; }
+
+    .enroll-status {
+      margin-top: 1rem;
+      padding: 14px 18px;
+      border-radius: var(--radius-sm);
+      display: none;
+      animation: statusAppear 0.3s ease;
     }
 
-    .badge-pending {
-      background: rgba(245, 158, 11, 0.12);
-      color: var(--accent-amber);
-      border: 1px solid rgba(245, 158, 11, 0.2);
+    @keyframes statusAppear {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .enroll-status.waiting {
+      background: rgba(99, 102, 241, 0.08);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      color: var(--accent-indigo);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .enroll-status.success {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      color: var(--accent-emerald);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .enroll-status.error {
+      background: rgba(244, 63, 94, 0.08);
+      border: 1px solid rgba(244, 63, 94, 0.2);
+      color: #fda4af;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .pulse-ring {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .enroll-status-icon {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      flex-shrink: 0;
     }
 
     /* ─── Transaction Log ─── */
-    .full-width { grid-column: 1 / -1; }
-
     .tx-list {
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
-      max-height: 300px;
+      gap: 0.6rem;
+      max-height: 280px;
       overflow-y: auto;
     }
 
-    .tx-list::-webkit-scrollbar { width: 4px; }
+    .tx-list::-webkit-scrollbar { width: 3px; }
     .tx-list::-webkit-scrollbar-track { background: transparent; }
-    .tx-list::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 4px; }
+    .tx-list::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 3px; }
 
     .tx-item {
       display: flex;
       align-items: center;
-      gap: 14px;
-      padding: 14px;
-      background: rgba(99, 102, 241, 0.04);
-      border: 1px solid rgba(99, 102, 241, 0.08);
+      gap: 12px;
+      padding: 12px;
+      background: rgba(99, 102, 241, 0.03);
+      border: 1px solid rgba(99, 102, 241, 0.06);
       border-radius: var(--radius-sm);
       transition: all 0.2s;
     }
 
     .tx-item:hover {
-      background: rgba(99, 102, 241, 0.08);
+      background: rgba(99, 102, 241, 0.06);
       border-color: var(--border-glow);
     }
 
     .tx-icon {
-      width: 40px;
-      height: 40px;
-      border-radius: 10px;
+      width: 36px; height: 36px;
+      border-radius: 8px;
       background: var(--gradient-primary);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
       flex-shrink: 0;
     }
 
-    .tx-details {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .tx-voter {
-      font-weight: 600;
-      font-size: 0.9rem;
-      color: var(--text-primary);
-    }
+    .tx-details { flex: 1; min-width: 0; }
+    .tx-voter { font-weight: 600; font-size: 0.82rem; }
 
     .tx-hash {
       font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 0.72rem;
+      font-size: 0.68rem;
       color: var(--text-muted);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    .tx-meta {
-      text-align: right;
-      flex-shrink: 0;
-    }
-
-    .tx-block {
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: var(--accent-cyan);
-    }
-
-    .tx-time {
-      font-size: 0.7rem;
-      color: var(--text-muted);
-    }
+    .tx-meta { text-align: right; flex-shrink: 0; }
+    .tx-block { font-size: 0.7rem; font-weight: 600; color: var(--accent-cyan); }
+    .tx-time { font-size: 0.65rem; color: var(--text-muted); }
 
     .tx-empty {
       text-align: center;
-      padding: 3rem;
+      padding: 2.5rem;
       color: var(--text-muted);
-      font-size: 0.9rem;
-    }
-
-    .tx-empty-icon {
-      font-size: 2.5rem;
-      margin-bottom: 0.75rem;
-      opacity: 0.5;
-    }
-
-    /* ─── Register Form ─── */
-    .register-section {
-      margin-bottom: 2rem;
-    }
-
-    .register-form {
-      display: flex;
-      gap: 12px;
-      align-items: flex-end;
-    }
-
-    .form-group {
-      flex: 1;
-    }
-
-    .form-label {
-      display: block;
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 6px;
-    }
-
-    .form-input {
-      width: 100%;
-      padding: 10px 14px;
-      background: rgba(99, 102, 241, 0.06);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-sm);
-      color: var(--text-primary);
-      font-family: inherit;
-      font-size: 0.9rem;
-      outline: none;
-      transition: all 0.2s;
-    }
-
-    .form-input:focus {
-      border-color: var(--accent-indigo);
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-    }
-
-    .form-input::placeholder { color: var(--text-muted); }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 20px;
-      border: none;
-      border-radius: var(--radius-sm);
-      font-family: inherit;
       font-size: 0.85rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      white-space: nowrap;
     }
 
-    .btn-primary {
-      background: var(--gradient-primary);
-      color: white;
-      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+    .tx-empty-icon { font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.4; }
+
+    .new-tx { animation: blockPulse 1s ease-out; }
+
+    @keyframes blockPulse {
+      0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.3); }
+      70% { box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
     }
 
-    .btn-primary:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
-    }
-
-    .btn-danger {
-      background: var(--gradient-danger);
-      color: white;
-      padding: 6px 12px;
-      font-size: 0.75rem;
-      border-radius: 6px;
-    }
-
-    .btn-danger:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(244, 63, 94, 0.3);
-    }
-
-    /* ─── Toast Notification ─── */
+    /* ─── Toast ─── */
     .toast-container {
       position: fixed;
-      top: 80px;
+      top: 74px;
       right: 20px;
       z-index: 200;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
     }
 
     .toast {
-      padding: 14px 20px;
+      padding: 12px 18px;
       border-radius: var(--radius-sm);
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       font-weight: 500;
       backdrop-filter: blur(20px);
       animation: toastIn 0.3s ease;
-      max-width: 380px;
+      max-width: 360px;
       box-shadow: var(--shadow-card);
     }
 
     .toast-success {
-      background: rgba(16, 185, 129, 0.15);
-      border: 1px solid rgba(16, 185, 129, 0.3);
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.25);
       color: #6ee7b7;
     }
 
     .toast-error {
-      background: rgba(244, 63, 94, 0.15);
-      border: 1px solid rgba(244, 63, 94, 0.3);
+      background: rgba(244, 63, 94, 0.12);
+      border: 1px solid rgba(244, 63, 94, 0.25);
       color: #fda4af;
     }
 
@@ -625,10 +791,9 @@
       to { opacity: 1; transform: translateX(0); }
     }
 
-    /* ─── Loading Spinner ─── */
+    /* ─── Spinner ─── */
     .spinner {
-      width: 20px;
-      height: 20px;
+      width: 18px; height: 18px;
       border: 2px solid rgba(255,255,255,0.2);
       border-top-color: white;
       border-radius: 50%;
@@ -636,218 +801,267 @@
       display: inline-block;
     }
 
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ─── Responsive ─── */
-    @media (max-width: 1024px) {
-      .hero-stats { grid-template-columns: repeat(2, 1fr); }
-      .dashboard-grid { grid-template-columns: 1fr; }
-    }
-
-    @media (max-width: 640px) {
-      .hero-stats { grid-template-columns: 1fr; }
-      .navbar-inner { padding: 0 1rem; }
-      .main-content { padding: 1rem; }
-      .register-form { flex-direction: column; }
-    }
-
-    /* ─── Block Pulse Animation ─── */
-    @keyframes blockPulse {
-      0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.3); }
-      70% { box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
-    }
-
-    .new-tx { animation: blockPulse 1s ease-out; }
-
-    /* ─── Winner Crown ─── */
-    .leading-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 0.7rem;
-      font-weight: 700;
-      color: var(--accent-amber);
-      background: rgba(245, 158, 11, 0.12);
-      padding: 2px 8px;
-      border-radius: 100px;
-    }
-
-    /* ─── Auto-Refresh Indicator ─── */
+    /* ─── Refresh Indicator ─── */
     .refresh-indicator {
       display: flex;
       align-items: center;
-      gap: 6px;
-      font-size: 0.7rem;
+      gap: 5px;
+      font-size: 0.65rem;
       color: var(--text-muted);
     }
 
     .refresh-ring {
-      width: 14px;
-      height: 14px;
+      width: 12px; height: 12px;
       border: 2px solid var(--border-subtle);
       border-top-color: var(--accent-indigo);
       border-radius: 50%;
       animation: spin 3s linear infinite;
     }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 1024px) {
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+      .dashboard-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .stats-row { grid-template-columns: 1fr; }
+      .navbar-inner { padding: 0 1rem; }
+      .main-content { padding: 1rem; }
+      .enroll-form { flex-direction: column; }
+      .login-card { padding: 2rem 1.5rem; }
+    }
+
+    /* ─── Scrollbar styles for voters panel ─── */
+    .voters-scroll {
+      max-height: 320px;
+      overflow-y: auto;
+    }
+
+    .voters-scroll::-webkit-scrollbar { width: 3px; }
+    .voters-scroll::-webkit-scrollbar-track { background: transparent; }
+    .voters-scroll::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 3px; }
   </style>
 </head>
 <body>
-  <!-- ─── Navbar ─── -->
-  <nav class="navbar">
-    <div class="navbar-inner">
-      <a href="/" class="navbar-brand">
-        <div class="navbar-logo">🗳️</div>
-        <div>
-          <div class="navbar-title">Blockchain Voting System</div>
-          <div class="navbar-subtitle">Powered by Ethereum • Ganache</div>
-        </div>
-      </a>
-      <div class="navbar-status">
-        <div class="refresh-indicator">
-          <div class="refresh-ring"></div>
-          <span>Live • Auto-refresh</span>
-        </div>
-        <div class="status-badge" id="connectionStatus">
-          <div class="status-dot"></div>
-          <span>Connected</span>
-        </div>
-      </div>
-    </div>
-  </nav>
 
-  <!-- ─── Toast Container ─── -->
+  <!-- Background Orbs -->
+  <div class="bg-orb bg-orb-1"></div>
+  <div class="bg-orb bg-orb-2"></div>
+  <div class="bg-orb bg-orb-3"></div>
+
+  <!-- Toast Container -->
   <div class="toast-container" id="toastContainer"></div>
 
-  <!-- ─── Main Content ─── -->
-  <div class="main-content">
+  <!-- ═══════════════════════════════════════════════════
+       LOGIN SCREEN
+       ═══════════════════════════════════════════════════ -->
+  <div class="login-wrapper" id="loginScreen">
+    <div class="login-card">
+      <div class="login-logo">🗳️</div>
+      <h1 class="login-title">Admin Panel</h1>
+      <p class="login-subtitle">Blockchain Voting System • Fingerprint Auth</p>
 
-    <!-- Hero Stats -->
-    <div class="hero-stats">
-      <div class="stat-card">
-        <div class="stat-label">Total Votes Cast</div>
-        <div class="stat-value" id="totalVotes">0</div>
-        <div class="stat-sub">On-chain verified</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Registered Voters</div>
-        <div class="stat-value" id="totalVoters">0</div>
-        <div class="stat-sub">Fingerprint authenticated</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Candidates</div>
-        <div class="stat-value" id="totalCandidates">0</div>
-        <div class="stat-sub">On smart contract</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">Contract Address</div>
-        <div class="stat-value" style="font-size:0.8rem; word-break:break-all;" id="contractAddr">—</div>
-        <div class="stat-sub">Ethereum Ganache</div>
-      </div>
-    </div>
+      <div class="login-error" id="loginError"></div>
 
-    <!-- Main Dashboard Grid -->
-    <div class="dashboard-grid">
+      <form id="loginForm">
+        <div class="form-group">
+          <label class="form-label" for="loginUsername">Username</label>
+          <input type="text" class="form-input" id="loginUsername" placeholder="Enter admin username" autocomplete="username" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="loginPassword">Password</label>
+          <input type="password" class="form-input" id="loginPassword" placeholder="Enter password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn btn-primary" id="loginBtn">
+          🔐 Sign In
+        </button>
+      </form>
 
-      <!-- Live Results Panel -->
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title">
-            <div class="panel-icon" style="background: var(--gradient-primary);">📊</div>
-            Live Voting Results
-          </div>
-          <div class="refresh-indicator">
-            <div class="refresh-ring"></div>
-            <span>Every 3s</span>
-          </div>
-        </div>
-        <div class="panel-body">
-          <div class="result-bar-container" id="resultsChart">
-            <!-- Populated by JS -->
-          </div>
-        </div>
-      </div>
-
-      <!-- Registered Voters Panel -->
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title">
-            <div class="panel-icon" style="background: var(--gradient-success);">👥</div>
-            Registered Voters
-          </div>
-        </div>
-        <div class="panel-body" style="padding: 0;">
-          <table class="voters-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Voter ID</th>
-                <th>FP #</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="votersTable">
-              <!-- Populated by JS -->
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Register New Voter -->
-      <div class="panel full-width register-section">
-        <div class="panel-header">
-          <div class="panel-title">
-            <div class="panel-icon" style="background: linear-gradient(135deg, #f59e0b, #f97316);">➕</div>
-            Register New Voter
-          </div>
-        </div>
-        <div class="panel-body">
-          <form class="register-form" id="registerForm">
-            <div class="form-group">
-              <label class="form-label" for="regName">Voter Name</label>
-              <input type="text" class="form-input" id="regName" placeholder="Enter full name" required>
-            </div>
-            <div class="form-group" style="max-width: 180px;">
-              <label class="form-label" for="regFpId">Fingerprint ID</label>
-              <input type="number" class="form-input" id="regFpId" placeholder="e.g. 6" min="1" required>
-            </div>
-            <button type="submit" class="btn btn-primary" id="registerBtn">
-              Register Voter
-            </button>
-          </form>
-        </div>
-      </div>
-
-      <!-- Transaction Log -->
-      <div class="panel full-width">
-        <div class="panel-header">
-          <div class="panel-title">
-            <div class="panel-icon" style="background: linear-gradient(135deg, #06b6d4, #3b82f6);">⛓️</div>
-            Blockchain Transaction Log
-          </div>
-          <span style="font-size: 0.75rem; color: var(--text-muted);" id="txCount">0 transactions</span>
-        </div>
-        <div class="panel-body">
-          <div class="tx-list" id="txLog">
-            <div class="tx-empty">
-              <div class="tx-empty-icon">⛓️</div>
-              <div>No transactions yet</div>
-              <div style="font-size: 0.78rem; margin-top: 4px;">Votes will appear here as blockchain transactions</div>
-            </div>
-          </div>
-        </div>
+      <div class="login-footer">
+        Powered by Ethereum • Ganache Network
       </div>
     </div>
   </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       ADMIN DASHBOARD
+       ═══════════════════════════════════════════════════ -->
+  <div class="dashboard" id="dashboard">
+
+    <!-- Navbar -->
+    <nav class="navbar">
+      <div class="navbar-inner">
+        <a href="/" class="navbar-brand">
+          <div class="navbar-logo">🗳️</div>
+          <div>
+            <div class="navbar-title">Blockchain Voting System</div>
+            <div class="navbar-subtitle">Admin Panel • Ethereum</div>
+          </div>
+        </a>
+        <div class="navbar-right">
+          <div class="live-badge">
+            <div class="live-dot"></div>
+            <span>Live • Auto-refresh</span>
+          </div>
+          <div class="admin-badge">
+            <div class="admin-avatar">S</div>
+            <span id="adminName">Saurabh</span>
+          </div>
+          <button class="btn-logout" id="logoutBtn" onclick="logout()">Logout</button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-content">
+
+      <!-- Stats Row -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">Total Votes Cast</div>
+          <div class="stat-value" id="totalVotes">0</div>
+          <div class="stat-sub">On-chain verified</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Registered Voters</div>
+          <div class="stat-value" id="totalVoters">0</div>
+          <div class="stat-sub">Fingerprint authenticated</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Candidates</div>
+          <div class="stat-value" id="totalCandidates">0</div>
+          <div class="stat-sub">Smart contract</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Contract Address</div>
+          <div class="stat-value" id="contractAddr">—</div>
+          <div class="stat-sub">Ethereum Ganache</div>
+        </div>
+      </div>
+
+      <!-- Main Grid -->
+      <div class="dashboard-grid">
+
+        <!-- Live Results -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <div class="panel-icon" style="background: var(--gradient-primary);">📊</div>
+              Live Voting Results
+            </div>
+            <div class="refresh-indicator">
+              <div class="refresh-ring"></div>
+              <span>3s</span>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="result-list" id="resultsChart"></div>
+          </div>
+        </div>
+
+        <!-- Registered Voters -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <div class="panel-icon" style="background: var(--gradient-success);">👥</div>
+              Registered Voters
+            </div>
+            <div class="refresh-indicator">
+              <div class="refresh-ring"></div>
+              <span>5s</span>
+            </div>
+          </div>
+          <div class="panel-body" style="padding: 0;">
+            <div class="voters-scroll">
+              <table class="voters-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Voter ID</th>
+                    <th>FP #</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="votersTable"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Enroll New Voter -->
+        <div class="panel full-width">
+          <div class="panel-header">
+            <div class="panel-title">
+              <div class="panel-icon" style="background: var(--gradient-warm);">🖐️</div>
+              Enroll New Voter
+            </div>
+            <span style="font-size: 0.7rem; color: var(--text-muted);">Fingerprint enrollment via sensor</span>
+          </div>
+          <div class="panel-body">
+            <form class="enroll-form" id="enrollForm">
+              <div class="form-group">
+                <label class="form-label" for="enrollName">Voter Name</label>
+                <input type="text" class="form-input" id="enrollName" placeholder="Enter full name" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="enrollUserId">User ID</label>
+                <input type="text" class="form-input" id="enrollUserId" placeholder="e.g. STU001" required>
+              </div>
+              <button type="submit" class="btn btn-success" id="enrollBtn">
+                🖐️ Authenticate & Enroll
+              </button>
+              <button type="button" class="btn btn-ghost btn-sm" id="cancelEnrollBtn" onclick="cancelEnrollment()" style="display:none;">
+                ✕ Cancel
+              </button>
+            </form>
+
+            <div class="enroll-status" id="enrollStatus">
+              <div class="pulse-ring"></div>
+              <div>
+                <div style="font-weight: 600;" id="enrollStatusTitle">Waiting for fingerprint...</div>
+                <div style="font-size: 0.75rem; opacity: 0.8;" id="enrollStatusMsg">Ask the voter to place their finger on the sensor</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Transaction Log -->
+        <div class="panel full-width">
+          <div class="panel-header">
+            <div class="panel-title">
+              <div class="panel-icon" style="background: linear-gradient(135deg, #06b6d4, #3b82f6);">⛓️</div>
+              Blockchain Transaction Log
+            </div>
+            <span style="font-size: 0.7rem; color: var(--text-muted);" id="txCount">0 transactions</span>
+          </div>
+          <div class="panel-body">
+            <div class="tx-list" id="txLog">
+              <div class="tx-empty">
+                <div class="tx-empty-icon">⛓️</div>
+                <div>No transactions yet</div>
+                <div style="font-size: 0.72rem; margin-top: 4px;">Votes will appear here as blockchain transactions</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /dashboard-grid -->
+    </div><!-- /main-content -->
+  </div><!-- /dashboard -->
 
   <script>
     // ═══════════════════════════════════════════════════
     //  State
     // ═══════════════════════════════════════════════════
     const API = '';
+    let authToken = localStorage.getItem('adminToken') || null;
     let transactions = [];
     let previousResults = null;
+    let activeEnrollmentId = null;
+    let enrollPollInterval = null;
+    let refreshIntervals = [];
 
     // ═══════════════════════════════════════════════════
     //  Toast Notifications
@@ -867,6 +1081,137 @@
     }
 
     // ═══════════════════════════════════════════════════
+    //  Auth Headers
+    // ═══════════════════════════════════════════════════
+    function authHeaders() {
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      };
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Login
+    // ═══════════════════════════════════════════════════
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('loginUsername').value.trim();
+      const password = document.getElementById('loginPassword').value;
+      const errorEl = document.getElementById('loginError');
+      const btn = document.getElementById('loginBtn');
+
+      if (!username || !password) return;
+
+      btn.innerHTML = '<div class="spinner"></div> Signing in...';
+      btn.disabled = true;
+      errorEl.style.display = 'none';
+
+      try {
+        const res = await fetch(`${API}/api/admin/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          authToken = data.token;
+          localStorage.setItem('adminToken', authToken);
+          showDashboard(data.admin);
+          showToast(`Welcome back, ${data.admin.name}!`);
+        } else {
+          errorEl.textContent = data.error || 'Login failed';
+          errorEl.style.display = 'block';
+        }
+      } catch (err) {
+        errorEl.textContent = 'Server unreachable. Is the backend running?';
+        errorEl.style.display = 'block';
+      }
+
+      btn.innerHTML = '🔐 Sign In';
+      btn.disabled = false;
+    });
+
+    // ═══════════════════════════════════════════════════
+    //  Logout
+    // ═══════════════════════════════════════════════════
+    async function logout() {
+      try {
+        await fetch(`${API}/api/admin/logout`, {
+          method: 'POST',
+          headers: authHeaders(),
+        });
+      } catch (e) { /* ignore */ }
+
+      authToken = null;
+      localStorage.removeItem('adminToken');
+      refreshIntervals.forEach(id => clearInterval(id));
+      refreshIntervals = [];
+
+      document.getElementById('loginScreen').style.display = 'flex';
+      document.getElementById('dashboard').style.display = 'none';
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Show Dashboard
+    // ═══════════════════════════════════════════════════
+    function showDashboard(admin) {
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+
+      if (admin && admin.name) {
+        document.getElementById('adminName').textContent = admin.name;
+      }
+
+      // Initial data fetch
+      fetchResults();
+      fetchVoters();
+      fetchHealth();
+
+      // Auto-refresh intervals
+      refreshIntervals.push(setInterval(fetchResults, 3000));
+      refreshIntervals.push(setInterval(fetchVoters, 5000));
+      refreshIntervals.push(setInterval(checkForNewVotes, 3000));
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Check existing session on page load
+    // ═══════════════════════════════════════════════════
+    async function checkSession() {
+      if (!authToken) return;
+
+      try {
+        const res = await fetch(`${API}/api/admin/verify`, {
+          headers: authHeaders(),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          showDashboard(data.admin);
+        } else {
+          authToken = null;
+          localStorage.removeItem('adminToken');
+        }
+      } catch (e) {
+        // Server might be down, show login
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Fetch Health / Contract
+    // ═══════════════════════════════════════════════════
+    async function fetchHealth() {
+      try {
+        const res = await fetch(`${API}/api/health`);
+        const data = await res.json();
+        document.getElementById('contractAddr').textContent =
+          data.contractAddress || 'See Ganache';
+      } catch (e) {
+        document.getElementById('contractAddr').textContent = 'Offline';
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
     //  Fetch Results
     // ═══════════════════════════════════════════════════
     async function fetchResults() {
@@ -878,17 +1223,13 @@
           document.getElementById('totalVotes').textContent = data.totalVotes;
           document.getElementById('totalCandidates').textContent = data.candidates.length;
         }
-      } catch (err) {
-        updateConnectionStatus(false);
-      }
+      } catch (err) { /* offline */ }
     }
 
     function renderResults(data) {
       const container = document.getElementById('resultsChart');
       const maxVotes = Math.max(1, ...data.candidates.map(c => c.voteCount));
       const totalVotes = data.totalVotes || 1;
-
-      // Find leader
       const leadVotes = Math.max(...data.candidates.map(c => c.voteCount));
 
       container.innerHTML = data.candidates.map((c, i) => {
@@ -907,14 +1248,12 @@
             </div>
             <div class="result-bar-bg">
               <div class="result-bar-fill bar-${i % 6}" style="width: ${Math.max(barWidth, 0)}%">
-                ${barWidth > 10 ? `<span class="result-percent">${percent}%</span>` : ''}
+                ${barWidth > 12 ? `<span class="result-percent">${percent}%</span>` : ''}
               </div>
             </div>
           </div>
         `;
       }).join('');
-
-      updateConnectionStatus(true);
     }
 
     // ═══════════════════════════════════════════════════
@@ -928,15 +1267,13 @@
           renderVoters(data.voters);
           document.getElementById('totalVoters').textContent = data.voters.length;
         }
-      } catch (err) {
-        console.error('Failed to fetch voters:', err);
-      }
+      } catch (err) { /* offline */ }
     }
 
     function renderVoters(voters) {
       const tbody = document.getElementById('votersTable');
       if (voters.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem; color:var(--text-muted);">No voters registered</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem; color:var(--text-muted);">No voters registered yet</td></tr>';
         return;
       }
       tbody.innerHTML = voters.map(v => `
@@ -950,49 +1287,11 @@
             </span>
           </td>
           <td>
-            <button class="btn btn-danger" onclick="deleteVoter('${v.voterId}')" title="Delete voter">✕</button>
+            <button class="btn btn-sm btn-danger-outline" onclick="deleteVoter('${v.voterId}')" title="Delete voter">✕</button>
           </td>
         </tr>
       `).join('');
     }
-
-    // ═══════════════════════════════════════════════════
-    //  Register Voter
-    // ═══════════════════════════════════════════════════
-    document.getElementById('registerForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const name = document.getElementById('regName').value.trim();
-      const fingerprintId = document.getElementById('regFpId').value.trim();
-
-      if (!name || !fingerprintId) return;
-
-      const btn = document.getElementById('registerBtn');
-      btn.innerHTML = '<div class="spinner"></div> Registering...';
-      btn.disabled = true;
-
-      try {
-        const res = await fetch(`${API}/api/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, fingerprintId: parseInt(fingerprintId) }),
-        });
-        const data = await res.json();
-
-        if (data.success) {
-          showToast(`✓ Registered: ${name} (FP#${fingerprintId})`);
-          document.getElementById('regName').value = '';
-          document.getElementById('regFpId').value = '';
-          fetchVoters();
-        } else {
-          showToast(data.error, 'error');
-        }
-      } catch (err) {
-        showToast('Registration failed: ' + err.message, 'error');
-      }
-
-      btn.innerHTML = 'Register Voter';
-      btn.disabled = false;
-    });
 
     // ═══════════════════════════════════════════════════
     //  Delete Voter
@@ -1014,7 +1313,134 @@
     }
 
     // ═══════════════════════════════════════════════════
-    //  Transaction Log (polls for changes)
+    //  Enrollment (Browser → Server → ESP32)
+    // ═══════════════════════════════════════════════════
+    document.getElementById('enrollForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('enrollName').value.trim();
+      const userId = document.getElementById('enrollUserId').value.trim();
+
+      if (!name || !userId) return;
+
+      const btn = document.getElementById('enrollBtn');
+      btn.innerHTML = '<div class="spinner"></div> Sending...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch(`${API}/api/admin/enroll`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ name, userId }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          activeEnrollmentId = data.enrollment.id;
+          showEnrollStatus('waiting', 'Waiting for fingerprint...', `Ask "${name}" to place their finger on the sensor`);
+          document.getElementById('cancelEnrollBtn').style.display = 'inline-flex';
+          btn.style.display = 'none';
+
+          // Start polling for enrollment status
+          enrollPollInterval = setInterval(() => pollEnrollmentStatus(activeEnrollmentId), 1500);
+        } else {
+          showToast(data.error, 'error');
+        }
+      } catch (err) {
+        showToast('Enrollment failed: ' + err.message, 'error');
+      }
+
+      btn.innerHTML = '🖐️ Authenticate & Enroll';
+      btn.disabled = false;
+    });
+
+    function showEnrollStatus(type, title, msg) {
+      const el = document.getElementById('enrollStatus');
+      el.className = `enroll-status ${type}`;
+      document.getElementById('enrollStatusTitle').textContent = title;
+      document.getElementById('enrollStatusMsg').textContent = msg;
+
+      // Update the icon based on status
+      const firstChild = el.firstElementChild;
+      if (type === 'waiting') {
+        firstChild.className = 'pulse-ring';
+        firstChild.innerHTML = '';
+      } else if (type === 'success') {
+        firstChild.className = 'enroll-status-icon';
+        firstChild.innerHTML = '✓';
+        firstChild.style.background = 'var(--accent-emerald)';
+        firstChild.style.color = 'white';
+      } else if (type === 'error') {
+        firstChild.className = 'enroll-status-icon';
+        firstChild.innerHTML = '✕';
+        firstChild.style.background = 'var(--accent-rose)';
+        firstChild.style.color = 'white';
+      }
+    }
+
+    async function pollEnrollmentStatus(enrollId) {
+      try {
+        const res = await fetch(`${API}/api/admin/enroll/${enrollId}/status`, {
+          headers: authHeaders(),
+        });
+        const data = await res.json();
+
+        if (!data.success) return;
+
+        const enrollment = data.enrollment;
+
+        if (enrollment.status === 'completed') {
+          clearInterval(enrollPollInterval);
+          enrollPollInterval = null;
+          showEnrollStatus('success', 'Fingerprint enrolled!', `${enrollment.name} registered with FP#${enrollment.fingerprintId}`);
+          showToast(`✓ ${enrollment.name} enrolled with fingerprint #${enrollment.fingerprintId}`);
+          resetEnrollForm();
+          fetchVoters();
+        } else if (enrollment.status === 'failed') {
+          clearInterval(enrollPollInterval);
+          enrollPollInterval = null;
+          showEnrollStatus('error', 'Enrollment failed', enrollment.error || 'An error occurred on the device');
+          showToast('Enrollment failed: ' + (enrollment.error || 'Unknown error'), 'error');
+          resetEnrollForm();
+        } else if (enrollment.status === 'enrolling') {
+          showEnrollStatus('waiting', 'Sensor activated...', 'Fingerprint sensor is capturing. Hold finger steady.');
+        }
+        // "pending" = still waiting for ESP32 to pick it up
+      } catch (err) { /* ignore */ }
+    }
+
+    async function cancelEnrollment() {
+      if (!activeEnrollmentId) return;
+
+      try {
+        await fetch(`${API}/api/admin/enroll/${activeEnrollmentId}`, {
+          method: 'DELETE',
+          headers: authHeaders(),
+        });
+      } catch (e) { /* ignore */ }
+
+      if (enrollPollInterval) {
+        clearInterval(enrollPollInterval);
+        enrollPollInterval = null;
+      }
+
+      activeEnrollmentId = null;
+      document.getElementById('enrollStatus').className = 'enroll-status';
+      resetEnrollForm();
+      showToast('Enrollment cancelled');
+    }
+
+    function resetEnrollForm() {
+      document.getElementById('enrollName').value = '';
+      document.getElementById('enrollUserId').value = '';
+      document.getElementById('enrollBtn').style.display = 'inline-flex';
+      document.getElementById('enrollBtn').innerHTML = '🖐️ Authenticate & Enroll';
+      document.getElementById('enrollBtn').disabled = false;
+      document.getElementById('cancelEnrollBtn').style.display = 'none';
+      activeEnrollmentId = null;
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  Transaction Log
     // ═══════════════════════════════════════════════════
     async function checkForNewVotes() {
       try {
@@ -1059,7 +1485,7 @@
           <div class="tx-empty">
             <div class="tx-empty-icon">⛓️</div>
             <div>No transactions yet</div>
-            <div style="font-size: 0.78rem; margin-top: 4px;">Votes will appear here as blockchain transactions</div>
+            <div style="font-size: 0.72rem; margin-top: 4px;">Votes will appear here as blockchain transactions</div>
           </div>`;
         return;
       }
@@ -1080,56 +1506,9 @@
     }
 
     // ═══════════════════════════════════════════════════
-    //  Connection Status
-    // ═══════════════════════════════════════════════════
-    function updateConnectionStatus(connected) {
-      const el = document.getElementById('connectionStatus');
-      if (connected) {
-        el.innerHTML = '<div class="status-dot"></div><span>Connected</span>';
-        el.style.borderColor = 'rgba(16, 185, 129, 0.2)';
-        el.style.color = 'var(--accent-emerald)';
-        el.style.background = 'rgba(16, 185, 129, 0.1)';
-      } else {
-        el.innerHTML = '<span style="color: var(--accent-rose);">⚠ Disconnected</span>';
-        el.style.borderColor = 'rgba(244, 63, 94, 0.2)';
-        el.style.background = 'rgba(244, 63, 94, 0.1)';
-      }
-    }
-
-    // ═══════════════════════════════════════════════════
-    //  Fetch Contract Address
-    // ═══════════════════════════════════════════════════
-    async function fetchHealth() {
-      try {
-        const res = await fetch(`${API}/api/health`);
-        const data = await res.json();
-        // Try to display contract address from a known endpoint
-      } catch (err) { /* ignore */ }
-    }
-
-    // ═══════════════════════════════════════════════════
     //  Init
     // ═══════════════════════════════════════════════════
-    async function init() {
-      await Promise.all([fetchResults(), fetchVoters(), fetchHealth()]);
-
-      // Set contract address from the page (we'll read it from the API)
-      try {
-        const res = await fetch(`${API}/api/health`);
-        const data = await res.json();
-        document.getElementById('contractAddr').textContent =
-          data.contractAddress || 'See Ganache';
-      } catch (e) {
-        document.getElementById('contractAddr').textContent = 'See Ganache';
-      }
-
-      // Auto-refresh
-      setInterval(fetchResults, 3000);
-      setInterval(fetchVoters, 5000);
-      setInterval(checkForNewVotes, 3000);
-    }
-
-    init();
+    checkSession();
   </script>
 </body>
 </html>
