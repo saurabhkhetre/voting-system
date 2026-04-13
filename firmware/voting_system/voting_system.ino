@@ -34,8 +34,8 @@
 #include <Adafruit_Fingerprint.h>
 
 // ─── USER CONFIG ─────────────────────────────────────────────
-const char* WIFI_SSID     = "Saurabh Khetre";
-const char* WIFI_PASSWORD = "PPPPPPPP";
+const char* WIFI_SSID     = "Saurabh";
+const char* WIFI_PASSWORD = "12345678";  // Set this to match your hotspot password
 const char* SERVER_IP     = "10.182.151.220";
 const int   SERVER_PORT   = 3000;
 
@@ -1130,22 +1130,80 @@ void connectWiFi() {
   tft.setCursor(30, 95);
   tft.print("Connecting");
 
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  // Force station mode and clear any stale connections
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect(true);
+  delay(500);
 
-  int dots = 0;
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(400);
-    tft.setCursor(90 + dots * 6, 95);
-    tft.setTextColor(PRIMARY_COLOR);
-    tft.print(".");
-    dots++;
-    if (dots > 20) {
-      dots = 0;
-      tft.fillRect(90, 95, 130, 10, CARD_COLOR);
+  Serial.printf("Connecting to WiFi: %s\n", WIFI_SSID);
+  Serial.println("NOTE: ESP32 only supports 2.4GHz WiFi!");
+
+  int maxAttempts = 3;
+  bool connected = false;
+
+  for (int attempt = 1; attempt <= maxAttempts && !connected; attempt++) {
+    Serial.printf("Attempt %d/%d...\n", attempt, maxAttempts);
+
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+    // Wait up to 15 seconds per attempt
+    unsigned long startAttempt = millis();
+    int dots = 0;
+
+    while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 15000) {
+      delay(500);
+      Serial.printf("  WiFi status: %d\n", WiFi.status());
+      tft.setCursor(90 + dots * 6, 95);
+      tft.setTextColor(PRIMARY_COLOR);
+      tft.print(".");
+      dots++;
+      if (dots > 18) {
+        dots = 0;
+        tft.fillRect(90, 95, 130, 10, CARD_COLOR);
+      }
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+      connected = true;
+    } else {
+      Serial.printf("  Attempt %d failed. Status: %d\n", attempt, WiFi.status());
+      WiFi.disconnect(true);
+      delay(1000);
+
+      // Show retry on screen
+      tft.fillRect(30, 95, 250, 10, CARD_COLOR);
+      tft.setCursor(30, 95);
+      tft.setTextColor(WARNING_COLOR);
+      String retryMsg = "Retry " + String(attempt) + "/" + String(maxAttempts) + "...";
+      tft.print(retryMsg.c_str());
     }
   }
 
+  if (!connected) {
+    Serial.println("WiFi FAILED after all attempts!");
+    Serial.println("Check: SSID, password, and 2.4GHz band");
+
+    tft.fillRoundRect(20, 75, SCREEN_W - 40, 50, 8, CARD_COLOR);
+    tft.drawRoundRect(20, 75, SCREEN_W - 40, 50, 8, ERROR_COLOR);
+    tft.setTextColor(ERROR_COLOR);
+    tft.setCursor(30, 80);
+    tft.print("WiFi FAILED!");
+    tft.setTextColor(TEXT_DIM);
+    tft.setCursor(30, 95);
+    tft.print("Check SSID/password");
+    tft.setCursor(30, 108);
+    tft.setTextColor(WARNING_COLOR);
+    tft.print("ESP32 = 2.4GHz ONLY!");
+
+    drawCenteredText("Rebooting in 5s...", 145, TEXT_MUTED, 1);
+    delay(5000);
+    ESP.restart();
+    return;
+  }
+
   // Connected!
+  Serial.printf("WiFi connected! IP: %s\n", WiFi.localIP().toString().c_str());
+
   tft.fillRoundRect(20, 75, SCREEN_W - 40, 35, 8, CARD_COLOR);
   tft.drawRoundRect(20, 75, SCREEN_W - 40, 35, 8, SUCCESS_COLOR);
   tft.setTextSize(1);
