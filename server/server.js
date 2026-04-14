@@ -112,14 +112,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Handle malformed JSON requests gracefully
-app.use((err, req, res, next) => {
-  if (err.type === "entity.parse.failed") {
-    return res.status(400).json({ success: false, error: "Invalid JSON in request body" });
-  }
-  next(err);
-});
-
 // Serve the browser UI from public/
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -286,9 +278,9 @@ app.get("/api/enroll/pending", (req, res) => {
 // ─── POST /api/enroll/complete ─────────────────────────────────
 // ESP32 calls this after fingerprint enrollment is done
 app.post("/api/enroll/complete", (req, res) => {
-  const { enrollmentId, fingerprintId, success, error } = req.body;
+  const { enrollmentId, fingerprintId, success: wasSuccessful, error: errorMsg } = req.body;
 
-  if (!enrollmentId) {
+  if (enrollmentId === undefined || enrollmentId === null) {
     return res.status(400).json({ success: false, error: "enrollmentId is required" });
   }
 
@@ -297,7 +289,7 @@ app.post("/api/enroll/complete", (req, res) => {
     return res.status(404).json({ success: false, error: "Enrollment not found" });
   }
 
-  if (success && fingerprintId) {
+  if (wasSuccessful && fingerprintId) {
     // Register the voter
     const voterId = `fp_${fingerprintId}`;
 
@@ -325,7 +317,7 @@ app.post("/api/enroll/complete", (req, res) => {
     });
   } else {
     enrollment.status = "failed";
-    enrollment.error = error || "Enrollment failed on device";
+    enrollment.error = errorMsg || "Enrollment failed on device";
     enrollment.completedAt = new Date().toISOString();
 
     console.log(`Enrollment failed: ${enrollment.name} — ${enrollment.error}`);
@@ -634,6 +626,14 @@ async function start() {
     console.log("");
   });
 }
+
+// Handle malformed JSON requests gracefully (must be after routes)
+app.use((err, req, res, next) => {
+  if (err.type === "entity.parse.failed") {
+    return res.status(400).json({ success: false, error: "Invalid JSON in request body" });
+  }
+  next(err);
+});
 
 start().catch((err) => {
   console.error("Failed to start server:", err.message);

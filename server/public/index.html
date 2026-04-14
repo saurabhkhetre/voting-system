@@ -1163,6 +1163,10 @@
         document.getElementById('adminName').textContent = admin.name;
       }
 
+      // Clear any existing intervals first (prevents duplicates on re-login)
+      refreshIntervals.forEach(id => clearInterval(id));
+      refreshIntervals = [];
+
       // Initial data fetch
       fetchResults();
       fetchVoters();
@@ -1193,7 +1197,9 @@
           localStorage.removeItem('adminToken');
         }
       } catch (e) {
-        // Server might be down, show login
+        // Server might be down — clear stale token so user sees login
+        authToken = null;
+        localStorage.removeItem('adminToken');
       }
     }
 
@@ -1342,6 +1348,7 @@
 
           // Start polling for enrollment status
           enrollPollInterval = setInterval(() => pollEnrollmentStatus(activeEnrollmentId), 1500);
+          return; // Don't reset button below
         } else {
           showToast(data.error, 'error');
         }
@@ -1349,6 +1356,7 @@
         showToast('Enrollment failed: ' + err.message, 'error');
       }
 
+      // Only reset button if enrollment didn't start
       btn.innerHTML = '🖐️ Authenticate & Enroll';
       btn.disabled = false;
     });
