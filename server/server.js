@@ -100,6 +100,23 @@ function requireAdmin(req, res, next) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  Device Heartbeat (ESP32 → Server → Dashboard)
+// ═══════════════════════════════════════════════════════════════
+let deviceStatus = {
+  connected: false,
+  lastHeartbeat: null,
+  wifiRSSI: null,
+  freeHeap: null,
+  fingerprint: {
+    connected: false,
+    templateCount: 0,
+    capacity: 0,
+  },
+  currentScreen: "",
+  uptime: 0,
+};
+
+// ═══════════════════════════════════════════════════════════════
 //  Enrollment Queue (browser → server → ESP32)
 // ═══════════════════════════════════════════════════════════════
 let enrollmentQueue = [];
@@ -133,7 +150,51 @@ app.get("/api/health", (req, res) => {
       "/api/admin/enroll",
       "/api/enroll/pending",
       "/api/enroll/complete",
+      "/api/heartbeat",
+      "/api/device/status",
     ],
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  Device Heartbeat Endpoints
+// ═══════════════════════════════════════════════════════════════
+
+// ─── POST /api/heartbeat ──────────────────────────────────────
+// ESP32 sends this every 5 seconds with its status
+app.post("/api/heartbeat", (req, res) => {
+  const { wifiRSSI, freeHeap, fingerprint, currentScreen, uptime } = req.body;
+
+  deviceStatus.connected = true;
+  deviceStatus.lastHeartbeat = new Date().toISOString();
+  deviceStatus.wifiRSSI = wifiRSSI || null;
+  deviceStatus.freeHeap = freeHeap || null;
+  deviceStatus.currentScreen = currentScreen || "";
+  deviceStatus.uptime = uptime || 0;
+
+  if (fingerprint) {
+    deviceStatus.fingerprint.connected = fingerprint.connected || false;
+    deviceStatus.fingerprint.templateCount = fingerprint.templateCount || 0;
+    deviceStatus.fingerprint.capacity = fingerprint.capacity || 0;
+  }
+
+  return res.json({ success: true });
+});
+
+// ─── GET /api/device/status ───────────────────────────────────
+// Dashboard polls this to show hardware indicators
+app.get("/api/device/status", (req, res) => {
+  // If last heartbeat was more than 10 seconds ago, mark as disconnected
+  if (deviceStatus.lastHeartbeat) {
+    const elapsed = Date.now() - new Date(deviceStatus.lastHeartbeat).getTime();
+    if (elapsed > 10000) {
+      deviceStatus.connected = false;
+    }
+  }
+
+  return res.json({
+    success: true,
+    device: deviceStatus,
   });
 });
 
@@ -615,7 +676,9 @@ async function start() {
     console.log("  GET  /api/voters             - List all registered voters");
     console.log("  GET  /api/candidates         - List candidates");
     console.log("  POST /api/vote               - Cast a vote");
-    console.log("  GET  /api/results            - Get live results\n");
+    console.log("  GET  /api/results            - Get live results");
+    console.log("  POST /api/heartbeat          - ESP32 heartbeat");
+    console.log("  GET  /api/device/status      - Device status for dashboard\n");
 
     // Show registered voters on startup
     const voterCount = Object.keys(VOTERS).length;

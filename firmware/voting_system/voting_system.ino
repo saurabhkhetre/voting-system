@@ -34,17 +34,23 @@
 #include <Adafruit_Fingerprint.h>
 
 // ─── USER CONFIG ─────────────────────────────────────────────
-const char* WIFI_SSID     = "Saurabh";
-const char* WIFI_PASSWORD = "12345678";  // Set this to match your hotspot password
-const char* SERVER_IP     = "10.182.151.220";
+const char* WIFI_SSID     = "Jarvis";
+const char* WIFI_PASSWORD = "987654321";  // Set this to match your hotspot password
+const char* SERVER_IP     = "10.111.204.220";
 const int   SERVER_PORT   = 3000;
 
 // Fingerprint sensor on Serial2 (GPIO 16=RX, GPIO 17=TX)
-#define FP_RX 16
-#define FP_TX 17
+#define FP_RX 17
+#define FP_TX 16
 
 // Admin fingerprint is stored at this slot in the sensor
 #define ADMIN_FP_ID 127  // Reserved slot for admin fingerprint
+
+// ─── SIMULATION MODE ─────────────────────────────────────────
+// Set to true to bypass fingerprint sensor (test with touch only)
+// Set to false when real sensor is connected and working
+#define SIMULATE_FINGERPRINT false
+int simFpIdCounter = 10;  // Auto-increment simulated fingerprint IDs
 // ──────────────────────────────────────────────────────────────
 
 // ─── Display & Touch ─────────────────────────────────────────
@@ -124,6 +130,9 @@ unsigned long lastServerPoll = 0;
 const unsigned long SERVER_POLL_INTERVAL = 3000; // Poll every 3 seconds
 unsigned long lastFpAnimTime = 0;
 int fpAnimFrame = 0;
+unsigned long lastHeartbeat = 0;
+const unsigned long HEARTBEAT_INTERVAL = 5000; // Send heartbeat every 5 seconds
+bool fpSensorConnected = false;
 
 // ─── Enhanced Colors (Premium Dark Theme) ───────────────────
 #define BG_COLOR       0x0841   // Deep dark blue-black
@@ -248,13 +257,21 @@ void drawFingerprintScreen() {
   // Central dot
   tft.fillCircle(cx, cy, 3, ACCENT_CYAN);
 
-  // Instructions with icon hints
-  drawCenteredText("Place your finger", 170, TEXT_COLOR, 2);
-  drawCenteredText("on the sensor", 192, TEXT_COLOR, 2);
+  if (SIMULATE_FINGERPRINT) {
+    // SIM MODE: Show touch buttons instead of waiting for sensor
+    drawCenteredText("[SIM MODE]", 165, WARNING_COLOR, 1);
+    drawButton(10, 180, 145, 30, "SIM VOTER (fp1)", PRIMARY_COLOR, TEXT_COLOR);
+    drawButton(165, 180, 145, 30, "SIM ADMIN", ACCENT_PURPLE, TEXT_COLOR);
+    drawCenteredText("Touch to simulate fingerprint", 222, TEXT_DIM, 1);
+  } else {
+    // Instructions with icon hints
+    drawCenteredText("Place your finger", 170, TEXT_COLOR, 2);
+    drawCenteredText("on the sensor", 192, TEXT_COLOR, 2);
 
-  // Animated status text
-  tft.drawFastHLine(60, 215, SCREEN_W - 120, DIVIDER_COLOR);
-  drawCenteredText("Waiting for fingerprint...", 222, TEXT_DIM, 1);
+    // Animated status text
+    tft.drawFastHLine(60, 215, SCREEN_W - 120, DIVIDER_COLOR);
+    drawCenteredText("Waiting for fingerprint...", 222, TEXT_DIM, 1);
+  }
 
   // Bottom branding
   tft.setTextSize(1);
@@ -1033,6 +1050,57 @@ void handleNameEntryTouch(int tx, int ty) {
 // Enrollment that also registers the name on the server
 void startEnrollmentWithName(int id, String name) {
   enrollId = id;
+
+  // SIM MODE: Skip fingerprint, go straight to server registration
+  if (SIMULATE_FINGERPRINT) {
+    int simSlot = simFpIdCounter++;
+    enrollId = simSlot;
+    Serial.printf("SIM: Simulating enrollment for '%s' at slot %d\n", name.c_str(), simSlot);
+
+    tft.fillScreen(BG_COLOR);
+    tft.fillRect(0, 0, SCREEN_W, 4, ACCENT_PURPLE);
+    drawCenteredText("SIM MODE", 14, WARNING_COLOR, 2);
+    drawCenteredText("Enrolling (simulated)...", 50, TEXT_DIM, 1);
+
+    // Show voter name prominently
+    tft.fillRoundRect(20, 70, SCREEN_W - 40, 40, 8, CARD_COLOR);
+    tft.drawRoundRect(20, 70, SCREEN_W - 40, 40, 8, ACCENT_CYAN);
+    drawCenteredText(name.c_str(), 78, TEXT_COLOR, 2);
+    String simIdStr = "Simulated FP ID: " + String(simSlot);
+    drawCenteredText(simIdStr.c_str(), 98, TEXT_DIM, 1);
+
+    drawCenteredText("Registering on server...", 130, TEXT_DIM, 1);
+    delay(500);
+
+    // Register on server
+    HTTPClient http;
+    http.begin(serverUrl("/api/register"));
+    http.addHeader("Content-Type", "application/json");
+    StaticJsonDocument<256> doc;
+    doc["fingerprintId"] = simSlot;
+    doc["name"] = name;
+    String body;
+    serializeJson(doc, body);
+    int httpCode = http.POST(body);
+    String response = http.getString();
+    http.end();
+
+    if (httpCode == 200) {
+      Serial.printf("SIM: Voter '%s' registered on server with FP#%d\n", name.c_str(), simSlot);
+      drawCenteredText("REGISTERED!", 155, SUCCESS_COLOR, 2);
+      drawCenteredText(name.c_str(), 180, GOLD_COLOR, 2);
+      String fpMsg = "Fingerprint ID: " + String(simSlot);
+      drawCenteredText(fpMsg.c_str(), 200, TEXT_DIM, 1);
+    } else {
+      Serial.printf("SIM: Server registration failed: %d\n", httpCode);
+      drawCenteredText("Server reg failed!", 155, ERROR_COLOR, 2);
+      drawCenteredText(response.c_str(), 180, TEXT_DIM, 1);
+    }
+
+    drawButton(60, 210, 200, 25, "BACK TO ADMIN", PRIMARY_COLOR, TEXT_COLOR);
+    currentScreen = SCREEN_ENROLL_DONE;
+    return;
+  }
   enrollName = name;
   currentScreen = SCREEN_ENROLL_WAIT;
   drawEnrollWaitScreen();
@@ -1586,6 +1654,9 @@ void startEnrollment(int id) {
 
 // Find next available slot for enrollment
 int getNextEnrollSlot() {
+  if (SIMULATE_FINGERPRINT) {
+    return simFpIdCounter;  // In sim mode, just return next counter
+  }
   // Check slots 1-126 for an empty one (127 is reserved for admin)
   for (int i = 1; i < ADMIN_FP_ID; i++) {
     uint8_t p = finger.loadModel(i);
@@ -1667,6 +1738,49 @@ void drawServerEnrollScreen() {
 }
 
 void executeServerEnrollment() {
+  // SIM MODE: Skip fingerprint, auto-complete enrollment
+  if (SIMULATE_FINGERPRINT) {
+    int simSlot = simFpIdCounter++;
+    enrollId = simSlot;
+    enrollName = serverEnrollName;
+
+    Serial.printf("SIM: Server enrollment for '%s' with simulated FP#%d\n", serverEnrollName.c_str(), simSlot);
+
+    // Show enrollment info on TFT
+    tft.fillScreen(BG_COLOR);
+    tft.fillRect(0, 0, SCREEN_W, 4, GOLD_COLOR);
+    drawCenteredText("SERVER ENROLLMENT", 12, GOLD_COLOR, 2);
+    drawCenteredText("[SIM MODE]", 35, WARNING_COLOR, 1);
+
+    // Voter info card with name
+    tft.fillRoundRect(20, 50, SCREEN_W - 40, 50, 8, CARD_COLOR);
+    tft.drawRoundRect(20, 50, SCREEN_W - 40, 50, 8, ACCENT_CYAN);
+    drawCenteredText(serverEnrollName.c_str(), 58, TEXT_COLOR, 2);
+    String idStr = "ID: " + serverEnrollUserId;
+    drawCenteredText(idStr.c_str(), 82, TEXT_DIM, 1);
+
+    drawCenteredText("Auto-enrolling...", 115, TEXT_DIM, 1);
+    delay(1000);
+
+    // Report success to server
+    reportEnrollmentComplete(true, simSlot, "");
+
+    // Show success on TFT
+    int cx = SCREEN_W / 2;
+    tft.fillCircle(cx, 150, 20, SUCCESS_COLOR);
+    tft.setTextColor(BG_COLOR); tft.setTextSize(2);
+    tft.setCursor(cx - 12, 143); tft.print("OK");
+
+    drawCenteredText("ENROLLED!", 180, SUCCESS_COLOR, 2);
+    drawCenteredText(serverEnrollName.c_str(), 200, GOLD_COLOR, 2);
+    String fpMsg = "Simulated FP ID: " + String(simSlot);
+    drawCenteredText(fpMsg.c_str(), 220, TEXT_DIM, 1);
+
+    drawButton(60, SCREEN_H - 28, 200, 25, "BACK TO VOTING", PRIMARY_COLOR, TEXT_COLOR);
+    currentScreen = SCREEN_ENROLL_DONE;
+    return;
+  }
+
   // Find next available slot
   int slot = getNextEnrollSlot();
   if (slot < 0) {
@@ -1739,7 +1853,7 @@ void executeServerEnrollment() {
   tft.fillRect(0, 0, SCREEN_W, 4, GOLD_COLOR);
   drawCenteredText("Place SAME finger", 80, TEXT_COLOR, 2);
   drawCenteredText("again on sensor", 105, TEXT_COLOR, 2);
-  drawCenteredText("for " + serverEnrollName, 140, ACCENT_CYAN, 1);
+  drawCenteredText(String("for " + serverEnrollName).c_str(), 140, ACCENT_CYAN, 1);
 
   p = -1;
   startTime = millis();
@@ -1978,10 +2092,13 @@ void connectWiFi() {
   initFingerprint();
 
   if (finger.verifyPassword()) {
+    fpSensorConnected = true;
+    finger.getTemplateCount();
     tft.fillRoundRect(20, 155, SCREEN_W - 40, 25, 8, CARD_COLOR);
     tft.drawRoundRect(20, 155, SCREEN_W - 40, 25, 8, SUCCESS_COLOR);
     drawCenteredText("Fingerprint: OK", 162, SUCCESS_COLOR, 1);
   } else {
+    fpSensorConnected = false;
     tft.fillRoundRect(20, 155, SCREEN_W - 40, 25, 8, CARD_COLOR);
     tft.drawRoundRect(20, 155, SCREEN_W - 40, 25, 8, ERROR_COLOR);
     drawCenteredText("Fingerprint: FAIL", 162, ERROR_COLOR, 1);
@@ -1995,12 +2112,89 @@ void connectWiFi() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//   HEARTBEAT — Send device status to server
+// ═══════════════════════════════════════════════════════════════
+
+void sendHeartbeat() {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  HTTPClient http;
+  http.begin(serverUrl("/api/heartbeat"));
+  http.addHeader("Content-Type", "application/json");
+  http.setTimeout(2000); // Short timeout so it doesn't block
+
+  // Get screen name for dashboard display
+  String screenName = "unknown";
+  switch (currentScreen) {
+    case SCREEN_FINGERPRINT:   screenName = "Waiting for fingerprint"; break;
+    case SCREEN_WELCOME:       screenName = "Welcome"; break;
+    case SCREEN_CANDIDATES:    screenName = "Candidate selection"; break;
+    case SCREEN_CONFIRM:       screenName = "Vote confirmation"; break;
+    case SCREEN_RESULT:        screenName = "Results"; break;
+    case SCREEN_ALREADY_VOTED: screenName = "Already voted"; break;
+    case SCREEN_ERROR:         screenName = "Error"; break;
+    case SCREEN_ENROLL_WAIT:   screenName = "Enrolling finger"; break;
+    case SCREEN_ADMIN_MENU:    screenName = "Admin menu"; break;
+    case SCREEN_ADMIN_NAME_ENTRY: screenName = "Name entry"; break;
+    case SCREEN_ADMIN_SETUP:   screenName = "Admin setup"; break;
+    case SCREEN_SERVER_ENROLL: screenName = "Server enrollment"; break;
+    default: break;
+  }
+
+  // Periodically re-check fingerprint sensor
+  bool fpCheck = fpSensorConnected;
+  int tplCount = 0;
+  int tplCapacity = 0;
+  if (!SIMULATE_FINGERPRINT) {
+    fpCheck = finger.verifyPassword();
+    fpSensorConnected = fpCheck;
+    if (fpCheck) {
+      finger.getTemplateCount();
+      tplCount = finger.templateCount;
+      finger.getParameters();
+      tplCapacity = finger.capacity;
+    }
+  } else {
+    fpCheck = true; // Simulated sensor is always "connected"
+    tplCount = 0;
+    tplCapacity = 162;
+  }
+
+  StaticJsonDocument<384> doc;
+  doc["wifiRSSI"] = WiFi.RSSI();
+  doc["freeHeap"] = ESP.getFreeHeap();
+  doc["currentScreen"] = screenName;
+  doc["uptime"] = millis() / 1000;
+
+  JsonObject fp = doc.createNestedObject("fingerprint");
+  fp["connected"] = fpCheck;
+  fp["templateCount"] = tplCount;
+  fp["capacity"] = tplCapacity;
+
+  String body;
+  serializeJson(doc, body);
+
+  int httpCode = http.POST(body);
+  http.end();
+
+  if (httpCode == 200) {
+    // Heartbeat sent OK (silent)
+  } else {
+    Serial.printf("Heartbeat failed: %d\n", httpCode);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 //   SETUP & LOOP
 // ═══════════════════════════════════════════════════════════════
 
 void setup() {
   Serial.begin(115200);
   Serial.println("\n=== Blockchain Voting System (Fingerprint Auth) ===\n");
+
+  if (SIMULATE_FINGERPRINT) {
+    Serial.println("*** SIMULATION MODE ENABLED — Fingerprint sensor bypassed ***");
+  }
 
   // Init display
   tft.init();
@@ -2014,15 +2208,20 @@ void setup() {
   // Connect WiFi
   connectWiFi();
 
-  // Check if admin fingerprint exists
-  adminExists = checkAdminExists();
-  Serial.printf("Admin fingerprint: %s\n", adminExists ? "EXISTS" : "NOT FOUND");
+  if (!SIMULATE_FINGERPRINT) {
+    // Check if admin fingerprint exists
+    adminExists = checkAdminExists();
+    Serial.printf("Admin fingerprint: %s\n", adminExists ? "EXISTS" : "NOT FOUND");
 
-  if (!adminExists) {
-    // First time setup — enroll admin fingerprint
-    Serial.println("No admin found! Starting admin setup...");
-    enrollAdmin();
-    return;
+    if (!adminExists) {
+      // First time setup — enroll admin fingerprint
+      Serial.println("No admin found! Starting admin setup...");
+      enrollAdmin();
+      return;
+    }
+  } else {
+    adminExists = true;  // Skip admin setup in sim mode
+    Serial.println("SIM MODE: Admin setup skipped");
   }
 
   // Show fingerprint scan screen
@@ -2065,15 +2264,51 @@ void loop() {
     return;
   }
 
+  // ─── Heartbeat: send device status to server every 5s ───
+  unsigned long hbNow = millis();
+  if (hbNow - lastHeartbeat >= HEARTBEAT_INTERVAL) {
+    lastHeartbeat = hbNow;
+    sendHeartbeat();
+  }
+
   // ─── Fingerprint scanning (non-blocking) ───
   if (currentScreen == SCREEN_FINGERPRINT) {
-    // Animate the pulse
-    animateFingerprintPulse();
+    // Animate the pulse (only in real mode)
+    if (!SIMULATE_FINGERPRINT) {
+      animateFingerprintPulse();
+    }
 
     // Poll server for browser-triggered enrollments
     pollServerForEnrollment();
 
-    // Check fingerprint every 200ms
+    if (SIMULATE_FINGERPRINT) {
+      // SIM MODE: Handle touch buttons on fingerprint screen
+      uint16_t stx = 0, sty = 0;
+      if (tft.getTouch(&stx, &sty)) {
+        unsigned long now = millis();
+        if (now - lastTouchTime < DEBOUNCE_MS) return;
+        lastTouchTime = now;
+
+        Serial.printf("SIM Touch: x=%d, y=%d\n", stx, sty);
+
+        // "SIM VOTER" button (left)
+        if (isTouched(stx, sty, 10, 180, 145, 30)) {
+          Serial.println("SIM: Voter fingerprint (ID 1)");
+          authenticateFingerprint(1);  // Simulate voter with FP#1
+          return;
+        }
+        // "SIM ADMIN" button (right)
+        if (isTouched(stx, sty, 165, 180, 145, 30)) {
+          Serial.println("SIM: Admin authenticated");
+          currentScreen = SCREEN_ADMIN_MENU;
+          drawAdminMenu();
+          return;
+        }
+      }
+      return;
+    }
+
+    // Check fingerprint every 200ms (real sensor mode)
     unsigned long now = millis();
     if (now - lastScanTime >= 200) {
       lastScanTime = now;
