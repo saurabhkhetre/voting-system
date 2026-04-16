@@ -65,6 +65,7 @@ Adafruit_Fingerprint finger = Adafruit_Fingerprint(&fpSerial);
 
 // ─── App State ───────────────────────────────────────────────
 enum Screen {
+  SCREEN_HOME,            // Home screen with VOTE button
   SCREEN_FINGERPRINT,     // "Place your finger on sensor"
   SCREEN_WELCOME,         // "Welcome, [Name]!"
   SCREEN_CANDIDATES,      // Candidate selection
@@ -84,7 +85,11 @@ enum Screen {
 
 bool adminExists = false;
 
-Screen currentScreen = SCREEN_FINGERPRINT;
+Screen currentScreen = SCREEN_HOME;
+
+// Error/already-voted auto-return timer
+unsigned long errorShownTime = 0;
+const unsigned long ERROR_DISPLAY_MS = 3000;  // Show error for 3 seconds then go home
 
 // Voter info
 String voterId = "";
@@ -210,6 +215,109 @@ void drawHeaderBar(const char* title, uint16_t accentColor) {
 
 bool isTouched(int tx, int ty, int bx, int by, int bw, int bh) {
   return (tx >= bx && tx <= bx + bw && ty >= by && ty <= by + bh);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//   SCREEN: Home (Premium Landing Page)
+// ═══════════════════════════════════════════════════════════════
+
+void drawHomeScreen() {
+  tft.fillScreen(BG_COLOR);
+
+  // Top accent gradient strip
+  tft.fillRect(0, 0, SCREEN_W, 4, PRIMARY_COLOR);
+  tft.fillRect(0, 4, SCREEN_W, 1, ACCENT_PURPLE);
+
+  // Branding title
+  drawCenteredText("SECURE E-VOTE", 18, PRIMARY_COLOR, 2);
+  drawGradientLine(50, 38, SCREEN_W - 100, PRIMARY_COLOR, ACCENT_PURPLE);
+  drawCenteredText("Blockchain Powered Voting System", 46, TEXT_MUTED, 1);
+
+  // Decorative fingerprint icon
+  int cx = SCREEN_W / 2;
+  int cy = 95;
+  tft.drawCircle(cx, cy, 28, ACCENT_TEAL);
+  tft.drawCircle(cx, cy, 26, PRIMARY_COLOR);
+  for (int i = -14; i <= 14; i += 5) {
+    int halfW = sqrt(max(0, 18 * 18 - i * i));
+    for (int px = -halfW; px <= halfW; px++) {
+      int wave = sin((float)(px + cx) * 0.2) * 2;
+      tft.drawPixel(cx + px, cy + i + wave, TEXT_DIM);
+    }
+  }
+  tft.fillCircle(cx, cy, 3, ACCENT_CYAN);
+
+  // Big VOTE button — premium style
+  int btnW = 220, btnH = 50;
+  int btnX = (SCREEN_W - btnW) / 2;
+  int btnY = 138;
+  // Shadow
+  tft.fillRoundRect(btnX + 3, btnY + 3, btnW, btnH, 12, BG_DARK);
+  // Button body — gradient-like with lighter top
+  tft.fillRoundRect(btnX, btnY, btnW, btnH, 12, SUCCESS_COLOR);
+  tft.drawFastHLine(btnX + 8, btnY + 2, btnW - 16, SUCCESS_LIGHT);
+  // Button text
+  tft.setTextColor(TEXT_COLOR);
+  tft.setTextSize(3);
+  int tw = tft.textWidth("VOTE NOW");
+  tft.setCursor(btnX + (btnW - tw) / 2, btnY + 14);
+  tft.print("VOTE NOW");
+
+  // Admin button — smaller, bottom-right
+  drawButton(SCREEN_W - 110, SCREEN_H - 35, 100, 28, "ADMIN", ACCENT_PURPLE, TEXT_COLOR);
+
+  // Bottom branding
+  tft.drawFastHLine(20, SCREEN_H - 14, SCREEN_W - 40, DIVIDER_COLOR);
+  tft.setTextSize(1);
+  tft.setTextColor(TEXT_MUTED);
+  tft.setCursor(20, SCREEN_H - 10);
+  tft.print("Ethereum");
+  tft.setCursor(SCREEN_W - 80, SCREEN_H - 10);
+  tft.print("Secured");
+}
+
+void handleHomeTouch(int tx, int ty) {
+  // VOTE NOW button
+  int btnW = 220, btnH = 50;
+  int btnX = (SCREEN_W - btnW) / 2;
+  int btnY = 138;
+  if (isTouched(tx, ty, btnX, btnY, btnW, btnH)) {
+    // Flash button
+    tft.fillRoundRect(btnX, btnY, btnW, btnH, 12, PRIMARY_COLOR);
+    tft.setTextColor(TEXT_COLOR); tft.setTextSize(3);
+    int tw2 = tft.textWidth("VOTE NOW");
+    tft.setCursor(btnX + (btnW - tw2) / 2, btnY + 14);
+    tft.print("VOTE NOW");
+    delay(200);
+
+    currentScreen = SCREEN_FINGERPRINT;
+    drawFingerprintScreen();
+    return;
+  }
+
+  // ADMIN button
+  if (isTouched(tx, ty, SCREEN_W - 110, SCREEN_H - 35, 100, 28)) {
+    if (SIMULATE_FINGERPRINT) {
+      currentScreen = SCREEN_ADMIN_MENU;
+      drawAdminMenu();
+    } else {
+      // Go to fingerprint screen for admin auth
+      currentScreen = SCREEN_FINGERPRINT;
+      drawFingerprintScreen();
+    }
+    return;
+  }
+}
+
+void goHome() {
+  voterId = "";
+  voterName = "";
+  voterFingerprintId = -1;
+  selectedCandidate = -1;
+  txHash = "";
+  resultMessage = "";
+  currentScreen = SCREEN_HOME;
+  drawHomeScreen();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -790,12 +898,14 @@ void drawAlreadyVotedScreen() {
   drawCenteredText("has already cast a vote.", 165, TEXT_DIM, 1);
   drawCenteredText("Each voter can only vote once.", 180, TEXT_MUTED, 1);
 
-  drawButton(60, 205, 200, 30, "NEW VOTER", PRIMARY_COLOR, TEXT_COLOR);
+  drawButton(60, 205, 200, 30, "HOME", PRIMARY_COLOR, TEXT_COLOR);
+  drawCenteredText("Returning home in 3s...", 228, TEXT_MUTED, 1);
+  errorShownTime = millis();
 }
 
 void handleAlreadyVotedTouch(int tx, int ty) {
   if (isTouched(tx, ty, 60, 205, 200, 30)) {
-    resetForNewVoter();
+    goHome();
   }
 }
 
@@ -825,12 +935,14 @@ void drawErrorScreen(String msg) {
   tft.fillRoundRect(20, 132, SCREEN_W - 40, 25, 6, CARD_COLOR);
   drawCenteredText(msg.c_str(), 137, TEXT_DIM, 1);
 
-  drawButton(60, 200, 200, 30, "TRY AGAIN", PRIMARY_COLOR, TEXT_COLOR);
+  drawButton(60, 200, 200, 30, "HOME", PRIMARY_COLOR, TEXT_COLOR);
+  drawCenteredText("Returning home in 3s...", 228, TEXT_MUTED, 1);
+  errorShownTime = millis();
 }
 
 void handleErrorTouch(int tx, int ty) {
   if (isTouched(tx, ty, 60, 200, 200, 30)) {
-    resetForNewVoter();
+    goHome();
   }
 }
 
@@ -1959,14 +2071,7 @@ void reportEnrollmentComplete(bool success, int fpId, String errorMsg) {
 // ═══════════════════════════════════════════════════════════════
 
 void resetForNewVoter() {
-  voterId = "";
-  voterName = "";
-  voterFingerprintId = -1;
-  selectedCandidate = -1;
-  txHash = "";
-  resultMessage = "";
-  currentScreen = SCREEN_FINGERPRINT;
-  drawFingerprintScreen();
+  goHome();
 }
 
 void connectWiFi() {
@@ -2196,14 +2301,35 @@ void setup() {
     Serial.println("*** SIMULATION MODE ENABLED — Fingerprint sensor bypassed ***");
   }
 
-  // Init display
+  // Init display — clean start
   tft.init();
-  tft.setRotation(1);  // Landscape
+  tft.writecommand(0x28);  // Display OFF during setup
+
+  // Clear display RAM in all rotations to prevent ghosting
+  for (uint8_t r = 0; r < 4; r++) {
+    tft.setRotation(r);
+    tft.fillScreen(TFT_BLACK);
+  }
+
+  // Set landscape rotation — rotated 90° right from rotation 1
+  tft.setRotation(2);  // 90° right from previous
   tft.fillScreen(BG_COLOR);
 
-  // Calibrate touch (adjust these values for your specific display)
-  // uint16_t calData[5] = {275, 3620, 264, 3532, 1};
-  // tft.setTouch(calData);
+  tft.writecommand(0x29);  // Display ON
+  delay(50);
+
+  // Touch calibration for rotation 2
+  uint16_t calData[5] = {300, 3600, 300, 3600, 3};
+  tft.setTouch(calData);
+
+  // Touch diagnostic — test if XPT2046 is responding
+  Serial.println("Testing touch controller...");
+  pinMode(21, OUTPUT);    // TOUCH_CS
+  digitalWrite(21, LOW);  // Select touch chip
+  delay(1);
+  digitalWrite(21, HIGH); // Deselect
+  Serial.println("TOUCH_CS pin 21 toggled. If touch works, you'll see coordinates in Serial Monitor.");
+
 
   // Connect WiFi
   connectWiFi();
@@ -2214,19 +2340,18 @@ void setup() {
     Serial.printf("Admin fingerprint: %s\n", adminExists ? "EXISTS" : "NOT FOUND");
 
     if (!adminExists) {
-      // First time setup — enroll admin fingerprint
       Serial.println("No admin found! Starting admin setup...");
       enrollAdmin();
       return;
     }
   } else {
-    adminExists = true;  // Skip admin setup in sim mode
+    adminExists = true;
     Serial.println("SIM MODE: Admin setup skipped");
   }
 
-  // Show fingerprint scan screen
-  currentScreen = SCREEN_FINGERPRINT;
-  drawFingerprintScreen();
+  // Show Home Screen
+  currentScreen = SCREEN_HOME;
+  drawHomeScreen();
 }
 
 unsigned long lastTouchTime = 0;
@@ -2248,6 +2373,7 @@ void loop() {
     if (WiFi.status() == WL_CONNECTED) {
       Serial.println("WiFi reconnected!");
       switch (currentScreen) {
+        case SCREEN_HOME:          drawHomeScreen(); break;
         case SCREEN_FINGERPRINT:   drawFingerprintScreen(); break;
         case SCREEN_WELCOME:       drawWelcomeScreen(); break;
         case SCREEN_CANDIDATES:    drawCandidateScreen(); break;
@@ -2255,7 +2381,7 @@ void loop() {
         case SCREEN_RESULT:        fetchAndDrawResults(); break;
         case SCREEN_ALREADY_VOTED: drawAlreadyVotedScreen(); break;
         case SCREEN_ERROR:         drawErrorScreen(resultMessage); break;
-        default: drawFingerprintScreen(); break;
+        default: drawHomeScreen(); break;
       }
     } else {
       drawErrorScreen("WiFi connection failed!");
@@ -2269,6 +2395,14 @@ void loop() {
   if (hbNow - lastHeartbeat >= HEARTBEAT_INTERVAL) {
     lastHeartbeat = hbNow;
     sendHeartbeat();
+  }
+
+  // ─── Auto-return from error/already-voted screens ───
+  if (currentScreen == SCREEN_ERROR || currentScreen == SCREEN_ALREADY_VOTED) {
+    if (millis() - errorShownTime > ERROR_DISPLAY_MS) {
+      goHome();
+      return;
+    }
   }
 
   // ─── Fingerprint scanning (non-blocking) ───
@@ -2294,7 +2428,7 @@ void loop() {
         // "SIM VOTER" button (left)
         if (isTouched(stx, sty, 10, 180, 145, 30)) {
           Serial.println("SIM: Voter fingerprint (ID 1)");
-          authenticateFingerprint(1);  // Simulate voter with FP#1
+          authenticateFingerprint(1);
           return;
         }
         // "SIM ADMIN" button (right)
@@ -2315,17 +2449,14 @@ void loop() {
       int fpId = checkFingerprint();
       if (fpId > 0) {
         if (fpId == ADMIN_FP_ID) {
-          // Admin fingerprint detected — show admin menu
           Serial.println("Admin authenticated!");
           currentScreen = SCREEN_ADMIN_MENU;
           drawAdminMenu();
         } else {
-          // Regular voter fingerprint
           authenticateFingerprint(fpId);
         }
         return;
       } else if (fpId == -2) {
-        // Finger detected but not recognized
         tft.fillRect(0, 218, SCREEN_W, 22, BG_COLOR);
         drawCenteredText("Not recognized! Try again.", 222, ERROR_COLOR, 1);
         delay(1500);
@@ -2347,9 +2478,9 @@ void loop() {
   if (currentScreen == SCREEN_RESULT) {
     refreshResults();
 
-    // Auto-return to fingerprint after 15 seconds
+    // Auto-return to home after 15 seconds
     if (millis() - resultShownTime > 15000) {
-      resetForNewVoter();
+      goHome();
       return;
     }
   }
@@ -2365,6 +2496,9 @@ void loop() {
     Serial.printf("Touch: x=%d, y=%d, screen=%d\n", tx, ty, currentScreen);
 
     switch (currentScreen) {
+      case SCREEN_HOME:
+        handleHomeTouch(tx, ty);
+        break;
       case SCREEN_CANDIDATES:
         handleCandidateTouch(tx, ty);
         break;
@@ -2381,7 +2515,6 @@ void loop() {
         handleErrorTouch(tx, ty);
         break;
       case SCREEN_ENROLL_DONE:
-        // "Back to voting" or "Back to admin"
         if (isTouched(tx, ty, 60, 200, 200, 30)) {
           currentScreen = SCREEN_ADMIN_MENU;
           drawAdminMenu();
