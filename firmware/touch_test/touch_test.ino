@@ -1,145 +1,224 @@
+/*
+ * ═══════════════════════════════════════════════════════════════
+ *   RAW XPT2046 TOUCH TEST — Direct SPI, No TFT_eSPI touch code
+ * ═══════════════════════════════════════════════════════════════
+ *
+ *  This sketch uses Arduino's hardware SPI directly to talk to the
+ *  XPT2046 touchscreen controller, completely bypassing TFT_eSPI.
+ *
+ *  INSTRUCTIONS:
+ *  1. Upload this sketch
+ *  2. Open Serial Monitor at 115200 baud
+ *  3. Touch the screen — you should see "TOUCH DETECTED" lines
+ *  4. If you see "RAW: x=0 y=0" always → TOUCH_CS wiring issue
+ *     If you see "RAW: x=4095 y=4095" → MISO wiring issue
+ *     If you see valid numbers (200-3900) → hardware is GOOD
+ *
+ *  XPT2046 SPI MODE: 0 (CPOL=0, CPHA=0)
+ *  Your pins (from User_Setup):
+ *    MOSI = 23, MISO = 19, CLK = 18, TOUCH_CS = 21
+ * ═══════════════════════════════════════════════════════════════
+ */
+
 #include <TFT_eSPI.h>
 #include <SPI.h>
 
+// ── Pin definitions ─────────────────────────────────────────
+#define TOUCH_CS_PIN 21
+#define SPI_MOSI     23
+#define SPI_MISO     19
+#define SPI_CLK      18
+
+// XPT2046 command bytes (12-bit differential mode)
+#define CMD_X_POS  0xD0   // 1 101 0 000 = START, CH=X(101), 12bit, DFR, PD=00
+#define CMD_Y_POS  0x90   // 1 001 0 000 = START, CH=Y(001), 12bit, DFR, PD=00
+#define CMD_Z1_POS 0xB0   // Pressure Z1
+#define CMD_Z2_POS 0xC0   // Pressure Z2
+
 TFT_eSPI tft = TFT_eSPI();
 
-int currentRotation = 0;
-unsigned long lastSwitch = 0;
-bool autoRotate = true;
+// ── Read XPT2046 using direct SPI transaction ───────────────
+// Returns 12-bit ADC value (0-4095)
+uint16_t xpt_read(uint8_t command) {
+  uint8_t buf[3] = {command, 0x00, 0x00};
+  
+  digitalWrite(TOUCH_CS_PIN, LOW);
+  delayMicroseconds(5);
+  
+  // Use hardware SPI — must match the frequency
+  SPI.beginTransaction(SPISettings(2500000, MSBFIRST, SPI_MODE0));
+  SPI.transfer(command);          // Send command
+  uint16_t high = SPI.transfer(0x00);  // Read high byte
+  uint16_t low  = SPI.transfer(0x00);  // Read low byte
+  SPI.endTransaction();
+  
+  digitalWrite(TOUCH_CS_PIN, HIGH);
+  delayMicroseconds(5);
+  
+  // Result is in bits 14:3 of the 16-bit response (shift right 3)
+  return ((high << 8) | low) >> 3;
+}
+
+// Read multiple samples and return median (noise reduction)
+uint16_t xpt_read_avg(uint8_t command, int samples = 5) {
+  uint16_t vals[10];
+  int n = min(samples, 10);
+  for (int i = 0; i < n; i++) {
+    vals[i] = xpt_read(command);
+    delayMicroseconds(200);
+  }
+  // Simple sort
+  for (int i = 0; i < n-1; i++)
+    for (int j = 0; j < n-1-i; j++)
+      if (vals[j] > vals[j+1]) { uint16_t t = vals[j]; vals[j] = vals[j+1]; vals[j+1] = t; }
+  return vals[n/2]; // median
+}
+
+// Check if screen is being touched (Z pressure reading)
+bool isTouched() {
+  SPI.beginTransaction(SPISettings(2500000, MSBFIRST, SPI_MODE0));
+  digitalWrite(TOUCH_CS_PIN, LOW);
+  delayMicroseconds(5);
+  SPI.transfer(CMD_Z1_POS);
+  uint16_t z1h = SPI.transfer(0); uint16_t z1l = SPI.transfer(0);
+  uint16_t z1 = ((z1h << 8) | z1l) >> 3;
+  SPI.transfer(CMD_Z2_POS);
+  uint16_t z2h = SPI.transfer(0); uint16_t z2l = SPI.transfer(0);
+  uint16_t z2 = ((z2h << 8) | z2l) >> 3;
+  digitalWrite(TOUCH_CS_PIN, HIGH);
+  SPI.endTransaction();
+  
+  // Z1 should be > 0 and Z2 should be < 4095 when touched
+  // Pressure value = (X/4096) * (Z2/Z1 - 1)  (simplified check)
+  return (z1 > 100 && z2 < 3900);
+}
+
 int touchCount = 0;
 
-void showRotationScreen(int rot) {
-  tft.setRotation(rot);
-  tft.fillScreen(TFT_BLACK);
-  
-  int w = tft.width();
-  int h = tft.height();
-  
-  // Draw border to show screen bounds
-  tft.drawRect(0, 0, w, h, TFT_GREEN);
-  tft.drawRect(1, 1, w-2, h-2, TFT_GREEN);
-  
-  // Show rotation info
-  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-  tft.setTextSize(3);
-  tft.setCursor(10, 10);
-  tft.printf("ROT %d", rot);
-  
-  tft.setTextSize(2);
-  tft.setCursor(10, 45);
-  tft.printf("%dx%d", w, h);
-  
-  // Show orientation type
-  tft.setTextSize(2);
-  tft.setCursor(10, 75);
-  if (w > h) {
-    tft.setTextColor(TFT_GREEN, TFT_BLACK);
-    tft.print("LANDSCAPE");
-  } else {
-    tft.setTextColor(TFT_RED, TFT_BLACK);
-    tft.print("PORTRAIT");
-  }
-  
-  // Instructions
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
+void drawInfo(uint16_t rawX, uint16_t rawY, uint16_t calX, uint16_t calY) {
+  tft.fillRect(0, 80, 240, 80, TFT_BLACK);
   tft.setTextSize(1);
-  tft.setCursor(10, 105);
-  tft.print("TOUCH SCREEN TO TEST!");
-  tft.setCursor(10, 120);
-  tft.print("Dots will appear where");
-  tft.setCursor(10, 135);
-  tft.print("you touch the screen.");
   
-  tft.setCursor(10, 160);
-  tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  tft.print("Auto-rotate in 8 sec...");
-  tft.setCursor(10, 175);
-  tft.print("Touch stops auto-rotate");
+  tft.setTextColor(TFT_CYAN);
+  tft.setCursor(5, 84); tft.print("RAW X: "); tft.print(rawX);
+  tft.setCursor(5, 98); tft.print("RAW Y: "); tft.print(rawY);
   
-  // Touch counter
-  tft.setCursor(10, 200);
-  tft.setTextColor(TFT_MAGENTA, TFT_BLACK);
-  tft.printf("Touches detected: %d", touchCount);
+  tft.setTextColor(TFT_GREEN);
+  tft.setCursor(5, 114); tft.print("CAL X: "); tft.print(calX);
+  tft.setCursor(5, 128); tft.print("CAL Y: "); tft.print(calY);
   
-  // Calibration
-  uint16_t calData[5] = {300, 3600, 300, 3600, 7};
-  tft.setTouch(calData);
-  
-  Serial.printf("\n--- Rotation %d: %dx%d (%s) ---\n", 
-    rot, w, h, w > h ? "LANDSCAPE" : "PORTRAIT");
+  tft.setTextColor(TFT_YELLOW);
+  tft.setCursor(5, 144); tft.print("Touches: "); tft.print(touchCount);
 }
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("\n=== TFT Touch & Rotation Test ===\n");
-  Serial.println("This sketch tests all 4 rotations and touch input.");
-  Serial.println("Touch the screen - you should see dots and Serial output.\n");
+  delay(500);
   
+  Serial.println("\n\n=== RAW XPT2046 TOUCH TEST ===");
+  Serial.println("Touch_CS=21, MOSI=23, MISO=19, CLK=18");
+  Serial.println("Touching screen should show values 200-3900");
+  Serial.println("x=0 or y=0 always  -> CS pin issue");
+  Serial.println("x=4095 always       -> MISO pin issue");
+  Serial.println("==========================================\n");
+  
+  // Configure TOUCH_CS as output, HIGH = deselected
+  pinMode(TOUCH_CS_PIN, OUTPUT);
+  digitalWrite(TOUCH_CS_PIN, HIGH);
+  
+  // Init display (draws the UI, does NOT initialise touch)
   tft.init();
+  tft.setRotation(2);
+  tft.fillScreen(TFT_BLACK);
+  delay(100);
   
-  // Start with rotation 0
-  showRotationScreen(0);
-  lastSwitch = millis();
+  // Apply some calibration for the CAL readout
+  uint16_t cal[5] = {339, 3498, 275, 3593, 2};
+  tft.setTouch(cal);
+  
+  // Draw header
+  tft.fillRect(0, 0, 240, 4, TFT_CYAN);
+  tft.setTextColor(TFT_CYAN); tft.setTextSize(2);
+  tft.setCursor(8, 10); tft.print("TOUCH TEST");
+  
+  tft.setTextColor(TFT_WHITE); tft.setTextSize(1);
+  tft.setCursor(8, 36); tft.print("TOUCH_CS = GPIO 21");
+  tft.setCursor(8, 50); tft.print("Touch screen to test...");
+  tft.setCursor(8, 64); tft.print("Watch Serial Monitor too.");
+  
+  tft.drawFastHLine(0, 76, 240, TFT_DARKGREY);
+  
+  // Corner markers so you can see the full screen area
+  tft.drawRect(2,   2,   20, 20, TFT_YELLOW);
+  tft.drawRect(218, 2,   20, 20, TFT_YELLOW);
+  tft.drawRect(2,   298, 20, 20, TFT_YELLOW);
+  tft.drawRect(218, 298, 20, 20, TFT_YELLOW);
+  
+  tft.setCursor(5,   168); tft.setTextColor(TFT_DARKGREY);
+  tft.print("Touch here");
+  tft.setCursor(5,   270); tft.print("Touch here");
+  tft.setCursor(140, 168); tft.print("Touch here");
+  tft.setCursor(140, 270); tft.print("Touch here");
 }
 
+uint32_t lastPrint = 0;
+uint16_t lastDotX = 0, lastDotY = 0;
+
 void loop() {
-  // Auto-rotate every 8 seconds (unless touch was detected)
-  if (autoRotate && millis() - lastSwitch > 8000) {
-    currentRotation = (currentRotation + 1) % 4;
-    showRotationScreen(currentRotation);
-    lastSwitch = millis();
+  // ── Method 1: Direct SPI read from XPT2046 ───────────────
+  bool touched1 = isTouched();
+  uint16_t rawX = 0, rawY = 0;
+  if (touched1) {
+    rawX = xpt_read_avg(CMD_X_POS, 5);
+    rawY = xpt_read_avg(CMD_Y_POS, 5);
   }
   
-  // Check for touch
-  uint16_t tx = 0, ty = 0;
+  // ── Method 2: TFT_eSPI getTouch (low threshold=200) ──────
+  uint16_t calX = 0, calY = 0;
+  bool touched2 = tft.getTouch(&calX, &calY, 200);
   
-  if (tft.getTouch(&tx, &ty)) {
+  // ── Output ───────────────────────────────────────────────
+  bool anyTouch = touched1 || touched2;
+  
+  if (anyTouch) {
     touchCount++;
     
-    // Stop auto-rotation on first touch
-    if (autoRotate) {
-      autoRotate = false;
-      Serial.println("*** TOUCH DETECTED! Auto-rotate stopped ***");
+    // Print to Serial
+    Serial.printf("[%d] RAW(%4d,%4d) CAL(%3d,%3d) | spi=%s tft=%s\n",
+      touchCount, rawX, rawY, calX, calY,
+      touched1 ? "YES" : "no",
+      touched2 ? "YES" : "no");
+    
+    // Update display
+    drawInfo(rawX, rawY, calX, calY);
+    
+    // Draw dot at calibrated position
+    if (calX > 0 && calX < 240 && calY > 200 && calY < 320) {
+      if (lastDotX > 0) tft.fillCircle(lastDotX, lastDotY, 6, TFT_BLACK);
+      lastDotX = calX; lastDotY = calY;
+      tft.fillCircle(calX, calY, 6, TFT_RED);
+      tft.drawCircle(calX, calY, 7, TFT_ORANGE);
+    } else if (rawX > 200 && rawX < 3900) {
+      // Map raw to screen (rough)
+      int sx = map(rawX, 339, 3498, 0, 240);
+      int sy = map(rawY, 275, 3593, 0, 320);
+      if (sx > 0 && sx < 240 && sy > 160 && sy < 320) {
+        if (lastDotX > 0) tft.fillCircle(lastDotX, lastDotY, 6, TFT_BLACK);
+        lastDotX = sx; lastDotY = sy;
+        tft.fillCircle(sx, sy, 6, TFT_PURPLE);
+        tft.drawCircle(sx, sy, 7, TFT_PINK);
+      }
     }
     
-    // Draw a dot where touched
-    tft.fillCircle(tx, ty, 4, TFT_RED);
-    tft.drawCircle(tx, ty, 6, TFT_YELLOW);
-    
-    // Print to serial
-    Serial.printf("Touch #%d: x=%d, y=%d (rotation=%d)\n", 
-      touchCount, tx, ty, currentRotation);
-    
-    // Update touch count on screen
-    tft.fillRect(0, 195, tft.width(), 20, TFT_BLACK);
-    tft.setCursor(10, 200);
-    tft.setTextColor(TFT_MAGENTA, TFT_BLACK);
-    tft.setTextSize(1);
-    tft.printf("Touches: %d | Last: %d,%d", touchCount, tx, ty);
-    
-    delay(50);  // Small debounce
+    lastPrint = millis();
+  } else {
+    if (millis() - lastPrint > 2000) {
+      uint16_t idleX = xpt_read(CMD_X_POS);
+      uint16_t idleY = xpt_read(CMD_Y_POS);
+      Serial.printf("No touch | idle raw(%4d,%4d)\n", idleX, idleY);
+      lastPrint = millis();
+    }
   }
   
-  // Also try raw SPI read of touch (bypassing library)
-  static unsigned long lastRawCheck = 0;
-  if (millis() - lastRawCheck > 1000) {
-    lastRawCheck = millis();
-    
-    // Quick check: manually read XPT2046 via SPI
-    digitalWrite(21, LOW);  // TOUCH_CS LOW (select)
-    uint8_t cmd = 0xD0;     // Read X position command
-    SPI.beginTransaction(SPISettings(2500000, MSBFIRST, SPI_MODE0));
-    SPI.transfer(cmd);
-    uint8_t hi = SPI.transfer(0);
-    uint8_t lo = SPI.transfer(0);
-    SPI.endTransaction();
-    digitalWrite(21, HIGH); // TOUCH_CS HIGH (deselect)
-    
-    uint16_t rawX = ((hi << 8) | lo) >> 3;
-    
-    // If rawX is not 0 and not max, something is being pressed
-    if (rawX > 100 && rawX < 4000) {
-      Serial.printf("RAW SPI TOUCH detected! rawX=%d\n", rawX);
-    }
-  }
+  delay(16);
 }

@@ -525,6 +525,17 @@ app.delete("/api/register/:voterId", (req, res) => {
   return res.json({ success: true, message: `Voter "${name}" deleted` });
 });
 
+// ─── POST /api/admin/reset-voters ──────────────────────────────
+// Called by ESP32 when admin re-enrolls from scratch.
+// Clears ALL voter records from voters.json.
+app.post("/api/admin/reset-voters", (req, res) => {
+  const count = Object.keys(VOTERS).length;
+  VOTERS = {};
+  saveVoters(VOTERS);
+  console.log(`[ADMIN RESET] Cleared ${count} voters from database (new admin enrollment).`);
+  return res.json({ success: true, message: `Cleared ${count} voters`, count });
+});
+
 // ─── GET /api/voters ────────────────────────────────────────────
 // List all registered voters
 app.get("/api/voters", async (req, res) => {

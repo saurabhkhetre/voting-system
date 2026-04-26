@@ -35,13 +35,16 @@
 
 // ─── USER CONFIG ─────────────────────────────────────────────
 const char* WIFI_SSID     = "Jarvis";
-const char* WIFI_PASSWORD = "987654321";  // Set this to match your hotspot password
-const char* SERVER_IP     = "10.111.204.220";
+const char* WIFI_PASSWORD = "987654321";
+const char* SERVER_IP     = "10.185.213.220";  // Auto-updated: current PC IP
 const int   SERVER_PORT   = 3000;
 
-// Fingerprint sensor on Serial2 (GPIO 16=RX, GPIO 17=TX)
-#define FP_RX 17
-#define FP_TX 16
+// Fingerprint sensor on Serial2
+// Wiring (verified from working reference code):
+//   Sensor TX  →  GPIO17  (ESP32 RX2)
+//   Sensor RX  →  GPIO16  (ESP32 TX2)
+#define FP_RX_PIN 17  // ESP32 RX2 receives from sensor TX
+#define FP_TX_PIN 16  // ESP32 TX2 sends to sensor RX
 
 // Admin fingerprint is stored at this slot in the sensor
 #define ADMIN_FP_ID 127  // Reserved slot for admin fingerprint
@@ -56,8 +59,9 @@ int simFpIdCounter = 10;  // Auto-increment simulated fingerprint IDs
 // ─── Display & Touch ─────────────────────────────────────────
 TFT_eSPI tft = TFT_eSPI();
 
-#define SCREEN_W 320
-#define SCREEN_H 240
+// Physical screen is 240x320 (portrait, rotation 2)
+#define SCREEN_W 240
+#define SCREEN_H 320
 
 // ─── Fingerprint Sensor ──────────────────────────────────────
 HardwareSerial fpSerial(2);  // Serial2
@@ -222,7 +226,9 @@ bool isTouched(int tx, int ty, int bx, int by, int bw, int bh) {
 // ═══════════════════════════════════════════════════════════════
 
 void drawHomeScreen() {
-  tft.fillScreen(BG_COLOR);
+  tft.fillScreen(TFT_BLACK);  // Hard black clear first (avoids color bleed)
+  delay(20);                   // Let DMA flush
+  tft.fillScreen(BG_COLOR);   // Now paint the background
 
   // Top accent gradient strip
   tft.fillRect(0, 0, SCREEN_W, 4, PRIMARY_COLOR);
@@ -230,63 +236,58 @@ void drawHomeScreen() {
 
   // Branding title
   drawCenteredText("SECURE E-VOTE", 18, PRIMARY_COLOR, 2);
-  drawGradientLine(50, 38, SCREEN_W - 100, PRIMARY_COLOR, ACCENT_PURPLE);
-  drawCenteredText("Blockchain Powered Voting System", 46, TEXT_MUTED, 1);
+  drawGradientLine(20, 38, SCREEN_W - 40, PRIMARY_COLOR, ACCENT_PURPLE);
+  drawCenteredText("Blockchain Powered", 46, TEXT_MUTED, 1);
 
-  // Decorative fingerprint icon
+  // Decorative fingerprint icon — centred, bigger on tall screen
   int cx = SCREEN_W / 2;
-  int cy = 95;
-  tft.drawCircle(cx, cy, 28, ACCENT_TEAL);
-  tft.drawCircle(cx, cy, 26, PRIMARY_COLOR);
-  for (int i = -14; i <= 14; i += 5) {
-    int halfW = sqrt(max(0, 18 * 18 - i * i));
+  int cy = 130;  // shifted down for 320px tall
+  tft.drawCircle(cx, cy, 38, ACCENT_TEAL);
+  tft.drawCircle(cx, cy, 36, PRIMARY_COLOR);
+  for (int i = -18; i <= 18; i += 5) {
+    int halfW = sqrt(max(0, 24 * 24 - i * i));
     for (int px = -halfW; px <= halfW; px++) {
       int wave = sin((float)(px + cx) * 0.2) * 2;
       tft.drawPixel(cx + px, cy + i + wave, TEXT_DIM);
     }
   }
-  tft.fillCircle(cx, cy, 3, ACCENT_CYAN);
+  tft.fillCircle(cx, cy, 4, ACCENT_CYAN);
 
-  // Big VOTE button — premium style
-  int btnW = 220, btnH = 50;
-  int btnX = (SCREEN_W - btnW) / 2;
-  int btnY = 138;
+  // Big VOTE button — fits 240px wide (200px button, 20px margins)
+  int btnW = 200, btnH = 55;
+  int btnX = (SCREEN_W - btnW) / 2;  // = 20
+  int btnY = 195;
   // Shadow
   tft.fillRoundRect(btnX + 3, btnY + 3, btnW, btnH, 12, BG_DARK);
-  // Button body — gradient-like with lighter top
+  // Button body
   tft.fillRoundRect(btnX, btnY, btnW, btnH, 12, SUCCESS_COLOR);
   tft.drawFastHLine(btnX + 8, btnY + 2, btnW - 16, SUCCESS_LIGHT);
   // Button text
   tft.setTextColor(TEXT_COLOR);
   tft.setTextSize(3);
   int tw = tft.textWidth("VOTE NOW");
-  tft.setCursor(btnX + (btnW - tw) / 2, btnY + 14);
+  tft.setCursor(btnX + (btnW - tw) / 2, btnY + 16);
   tft.print("VOTE NOW");
 
-  // Admin button — smaller, bottom-right
-  drawButton(SCREEN_W - 110, SCREEN_H - 35, 100, 28, "ADMIN", ACCENT_PURPLE, TEXT_COLOR);
+  // Admin button — bottom centre
+  int abtnW = 110, abtnX = (SCREEN_W - abtnW) / 2;
+  drawButton(abtnX, SCREEN_H - 42, abtnW, 30, "ADMIN", ACCENT_PURPLE, TEXT_COLOR);
 
   // Bottom branding
-  tft.drawFastHLine(20, SCREEN_H - 14, SCREEN_W - 40, DIVIDER_COLOR);
-  tft.setTextSize(1);
-  tft.setTextColor(TEXT_MUTED);
-  tft.setCursor(20, SCREEN_H - 10);
-  tft.print("Ethereum");
-  tft.setCursor(SCREEN_W - 80, SCREEN_H - 10);
-  tft.print("Secured");
+  tft.drawFastHLine(10, SCREEN_H - 10, SCREEN_W - 20, DIVIDER_COLOR);
 }
 
 void handleHomeTouch(int tx, int ty) {
   // VOTE NOW button
-  int btnW = 220, btnH = 50;
-  int btnX = (SCREEN_W - btnW) / 2;
-  int btnY = 138;
+  int btnW = 200, btnH = 55;
+  int btnX = (SCREEN_W - btnW) / 2;  // = 20
+  int btnY = 195;
   if (isTouched(tx, ty, btnX, btnY, btnW, btnH)) {
     // Flash button
     tft.fillRoundRect(btnX, btnY, btnW, btnH, 12, PRIMARY_COLOR);
     tft.setTextColor(TEXT_COLOR); tft.setTextSize(3);
     int tw2 = tft.textWidth("VOTE NOW");
-    tft.setCursor(btnX + (btnW - tw2) / 2, btnY + 14);
+    tft.setCursor(btnX + (btnW - tw2) / 2, btnY + 16);
     tft.print("VOTE NOW");
     delay(200);
 
@@ -295,13 +296,13 @@ void handleHomeTouch(int tx, int ty) {
     return;
   }
 
-  // ADMIN button
-  if (isTouched(tx, ty, SCREEN_W - 110, SCREEN_H - 35, 100, 28)) {
+  // ADMIN button — bottom centre
+  int abtnW = 110, abtnX = (SCREEN_W - abtnW) / 2;
+  if (isTouched(tx, ty, abtnX, SCREEN_H - 42, abtnW, 30)) {
     if (SIMULATE_FINGERPRINT) {
       currentScreen = SCREEN_ADMIN_MENU;
       drawAdminMenu();
     } else {
-      // Go to fingerprint screen for admin auth
       currentScreen = SCREEN_FINGERPRINT;
       drawFingerprintScreen();
     }
@@ -366,26 +367,27 @@ void drawFingerprintScreen() {
   tft.fillCircle(cx, cy, 3, ACCENT_CYAN);
 
   if (SIMULATE_FINGERPRINT) {
-    // SIM MODE: Show touch buttons instead of waiting for sensor
-    drawCenteredText("[SIM MODE]", 165, WARNING_COLOR, 1);
-    drawButton(10, 180, 145, 30, "SIM VOTER (fp1)", PRIMARY_COLOR, TEXT_COLOR);
-    drawButton(165, 180, 145, 30, "SIM ADMIN", ACCENT_PURPLE, TEXT_COLOR);
-    drawCenteredText("Touch to simulate fingerprint", 222, TEXT_DIM, 1);
+    // SIM MODE: Show touch buttons stacked to fit 240px wide
+    drawCenteredText("[SIM MODE]", 180, WARNING_COLOR, 1);
+    // Each button = 110px wide, centred
+    int sbtnW = 110;
+    drawButton((SCREEN_W/2) - sbtnW - 5, 198, sbtnW, 32, "SIM VOTER", PRIMARY_COLOR, TEXT_COLOR);
+    drawButton((SCREEN_W/2) + 5,         198, sbtnW, 32, "SIM ADMIN", ACCENT_PURPLE, TEXT_COLOR);
+    drawCenteredText("Touch to simulate", 240, TEXT_DIM, 1);
   } else {
-    // Instructions with icon hints
-    drawCenteredText("Place your finger", 170, TEXT_COLOR, 2);
-    drawCenteredText("on the sensor", 192, TEXT_COLOR, 2);
+    // Instructions
+    drawCenteredText("Place your finger", 200, TEXT_COLOR, 2);
+    drawCenteredText("on the sensor", 222, TEXT_COLOR, 2);
 
-    // Animated status text
-    tft.drawFastHLine(60, 215, SCREEN_W - 120, DIVIDER_COLOR);
-    drawCenteredText("Waiting for fingerprint...", 222, TEXT_DIM, 1);
+    tft.drawFastHLine(30, 252, SCREEN_W - 60, DIVIDER_COLOR);
+    drawCenteredText("Waiting...", 258, TEXT_DIM, 1);
   }
 
   // Bottom branding
   tft.setTextSize(1);
   tft.setTextColor(TEXT_MUTED, BG_COLOR);
-  tft.setCursor(SCREEN_W - 85, SCREEN_H - 10);
-  tft.print("Ethereum");
+  tft.setCursor(10, SCREEN_H - 10);
+  tft.print("Ethereum Blockchain");
 }
 
 void animateFingerprintPulse() {
@@ -424,39 +426,38 @@ void drawWelcomeScreen() {
   // Top accent strip — green for success
   tft.fillRect(0, 0, SCREEN_W, 4, SUCCESS_COLOR);
 
-  // Success icon — checkmark circle
+  // Success icon — checkmark circle (centred, lower on tall screen)
   int cx = SCREEN_W / 2;
-  tft.fillCircle(cx, 60, 32, SUCCESS_COLOR);
-  tft.fillCircle(cx, 60, 28, BG_COLOR);
-  tft.fillCircle(cx, 60, 26, SUCCESS_COLOR);
+  tft.fillCircle(cx, 80, 36, SUCCESS_COLOR);
+  tft.fillCircle(cx, 80, 32, BG_COLOR);
+  tft.fillCircle(cx, 80, 30, SUCCESS_COLOR);
   tft.setTextColor(BG_COLOR);
   tft.setTextSize(3);
-  tft.setCursor(cx - 12, 48);
+  tft.setCursor(cx - 12, 68);
   tft.print("OK");
 
   // Decorative line
-  tft.drawFastHLine(50, 102, SCREEN_W - 100, SUCCESS_COLOR);
-  tft.drawFastHLine(50, 103, SCREEN_W - 100, DIVIDER_COLOR);
+  tft.drawFastHLine(20, 128, SCREEN_W - 40, SUCCESS_COLOR);
 
   // Welcome text
-  drawCenteredText("AUTHENTICATED", 112, SUCCESS_COLOR, 2);
+  drawCenteredText("AUTHENTICATED", 138, SUCCESS_COLOR, 2);
 
   // Voter name card
-  tft.fillRoundRect(30, 138, SCREEN_W - 60, 36, 8, CARD_COLOR);
-  tft.drawRoundRect(30, 138, SCREEN_W - 60, 36, 8, SUCCESS_COLOR);
-  drawCenteredText(voterName.c_str(), 148, TEXT_COLOR, 2);
+  tft.fillRoundRect(20, 165, SCREEN_W - 40, 36, 8, CARD_COLOR);
+  tft.drawRoundRect(20, 165, SCREEN_W - 40, 36, 8, SUCCESS_COLOR);
+  drawCenteredText(voterName.c_str(), 175, TEXT_COLOR, 2);
 
   // ID display
   String idText = "ID: " + voterId;
-  drawCenteredText(idText.c_str(), 185, TEXT_MUTED, 1);
+  drawCenteredText(idText.c_str(), 215, TEXT_MUTED, 1);
 
   // Loading indicator
-  drawCenteredText("Loading candidates...", 210, TEXT_DIM, 1);
+  drawCenteredText("Loading candidates...", 240, TEXT_DIM, 1);
 
-  // Progress dots animation area
-  tft.fillCircle(cx - 15, 228, 3, PRIMARY_COLOR);
-  tft.fillCircle(cx, 228, 3, TEXT_DIM);
-  tft.fillCircle(cx + 15, 228, 3, TEXT_DIM);
+  // Progress dots
+  tft.fillCircle(cx - 15, 265, 4, PRIMARY_COLOR);
+  tft.fillCircle(cx,      265, 4, TEXT_DIM);
+  tft.fillCircle(cx + 15, 265, 4, TEXT_DIM);
 
   welcomeShownTime = millis();
 }
@@ -583,44 +584,54 @@ void drawConfirmScreen() {
 
   // Title
   drawCenteredText("CONFIRM VOTE", 16, WARNING_COLOR, 2);
-  tft.drawFastHLine(50, 36, SCREEN_W - 100, DIVIDER_COLOR);
+  tft.drawFastHLine(20, 36, SCREEN_W - 40, DIVIDER_COLOR);
 
-  // Candidate info card
-  tft.fillRoundRect(25, 50, SCREEN_W - 50, 60, 10, CARD_COLOR);
-  tft.drawRoundRect(25, 50, SCREEN_W - 50, 60, 10, PRIMARY_COLOR);
+  // Candidate info card  (fits 240px: 20px margin each side)
+  tft.fillRoundRect(15, 48, SCREEN_W - 30, 65, 10, CARD_COLOR);
+  tft.drawRoundRect(15, 48, SCREEN_W - 30, 65, 10, PRIMARY_COLOR);
   drawCenteredText("Your choice:", 58, TEXT_DIM, 1);
-  drawCenteredText(candidates[selectedCandidate].name.c_str(), 78, TEXT_COLOR, 2);
+  drawCenteredText(candidates[selectedCandidate].name.c_str(), 80, TEXT_COLOR, 2);
+  drawCenteredText("candidate", 100, TEXT_MUTED, 1);
 
   // Voter info
-  tft.fillRoundRect(50, 120, SCREEN_W - 100, 20, 6, CARD_COLOR);
+  tft.fillRoundRect(20, 125, SCREEN_W - 40, 22, 6, CARD_COLOR);
   String voterStr = "Voter: " + voterName;
-  drawCenteredText(voterStr.c_str(), 124, ACCENT_CYAN, 1);
+  drawCenteredText(voterStr.c_str(), 130, ACCENT_CYAN, 1);
 
-  // Warning message with icon
-  drawCenteredText("! This cannot be undone !", 150, WARNING_COLOR, 1);
+  // Warning
+  drawCenteredText("! Cannot be undone !", 162, WARNING_COLOR, 1);
 
-  // Buttons — Cancel and Confirm with premium styling
-  // Cancel button (left)
-  drawButton(25, 178, 125, 45, "CANCEL", ERROR_COLOR, TEXT_COLOR);
+  // Stacked buttons — both full-width in a 240px display
+  int bW = SCREEN_W - 40, bX = 20;
+  // CONFIRM button (top, green — most important action)
+  tft.fillRoundRect(bX + 2, 182, bW, 46, 10, BG_DARK);
+  tft.fillRoundRect(bX,     180, bW, 46, 10, SUCCESS_COLOR);
+  tft.drawFastHLine(bX + 6, 182, bW - 12, SUCCESS_LIGHT);
+  tft.setTextColor(TEXT_COLOR); tft.setTextSize(2);
+  int tw = tft.textWidth("CONFIRM VOTE");
+  tft.setCursor(bX + (bW - tw) / 2, 196);
+  tft.print("CONFIRM VOTE");
 
-  // Confirm button (right) — green with emphasis
-  drawButton(170, 178, 125, 45, "CONFIRM", SUCCESS_COLOR, TEXT_COLOR);
+  // CANCEL button (below)
+  drawButton(bX, 238, bW, 38, "CANCEL", ERROR_COLOR, TEXT_COLOR);
 
-  // Blockchain info at bottom
-  drawCenteredText("Stored on Ethereum Blockchain", 230, TEXT_MUTED, 1);
+  // Blockchain info
+  drawCenteredText("Ethereum Blockchain", 292, TEXT_MUTED, 1);
 }
 
 void handleConfirmTouch(int tx, int ty) {
-  // CANCEL
-  if (isTouched(tx, ty, 25, 178, 125, 45)) {
-    currentScreen = SCREEN_CANDIDATES;
-    drawCandidateScreen();
+  int bW = SCREEN_W - 40, bX = 20;
+
+  // CONFIRM
+  if (isTouched(tx, ty, bX, 180, bW, 46)) {
+    submitVote();
     return;
   }
 
-  // CONFIRM
-  if (isTouched(tx, ty, 170, 178, 125, 45)) {
-    submitVote();
+  // CANCEL
+  if (isTouched(tx, ty, bX, 238, bW, 38)) {
+    currentScreen = SCREEN_CANDIDATES;
+    drawCandidateScreen();
     return;
   }
 }
@@ -1045,10 +1056,11 @@ void drawNameEntryScreen() {
     rows[2] = "         ";
   }
 
-  int keyW = 28;
-  int keyH = 28;
+  // Key size: 20px wide, 3px gap -> 10 keys = 10*(20+3)=230 < 240 ✓
+  int keyW = 20;
+  int keyH = 26;
   int startY = 65;
-  int gap = 4;
+  int gap = 3;
 
   for (int r = 0; r < 3; r++) {
     int rowLen = strlen(rows[r]);
@@ -1057,33 +1069,32 @@ void drawNameEntryScreen() {
       int kx = startX + c * (keyW + gap);
       int ky = startY + r * (keyH + gap);
       char ch = rows[r][c];
+      tft.fillRoundRect(kx, ky, keyW, keyH, 3, CARD_COLOR);
       if (ch == ' ') {
-        tft.fillRoundRect(kx, ky, keyW, keyH, 4, CARD_COLOR);
         tft.setTextColor(TEXT_DIM); tft.setTextSize(1);
-        tft.setCursor(kx + 4, ky + 10); tft.print("SP");
+        tft.setCursor(kx + 2, ky + 9); tft.print("SP");
       } else {
-        tft.fillRoundRect(kx, ky, keyW, keyH, 4, CARD_COLOR);
-        tft.setTextColor(TEXT_COLOR); tft.setTextSize(2);
-        tft.setCursor(kx + 8, ky + 6); tft.print(ch);
+        tft.setTextColor(TEXT_COLOR); tft.setTextSize(1);
+        tft.setCursor(kx + 5, ky + 9); tft.print(ch);
       }
     }
   }
 
-  // Bottom buttons: DEL | ABC/abc/123 | NEXT
-  int btnY = startY + 3 * (keyH + gap) + 5;
-  drawButton(10, btnY, 70, 30, "DEL", ERROR_COLOR, TEXT_COLOR);
-
+  // Bottom buttons: DEL | Mode | NEXT (each ~74px, fits 240px: 3*74+3*6=240)
+  int btnY = startY + 3 * (keyH + gap) + 6;
+  int bW = (SCREEN_W - 20) / 3;  // ~73px each
+  drawButton(5,          btnY, bW, 30, "DEL",  ERROR_COLOR,   TEXT_COLOR);
   const char* modeLabel = (kbPage == 0) ? "abc" : (kbPage == 1) ? "123" : "ABC";
-  drawButton(90, btnY, 70, 30, modeLabel, ACCENT_PURPLE, TEXT_COLOR);
-
-  drawButton(170, btnY, 140, 30, "NEXT >>", SUCCESS_COLOR, TEXT_COLOR);
+  drawButton(5 + bW + 5, btnY, bW, 30, modeLabel, ACCENT_PURPLE, TEXT_COLOR);
+  drawButton(5 + 2*(bW + 5), btnY, bW + 5, 30, "NEXT>>", SUCCESS_COLOR, TEXT_COLOR);
 }
 
 void handleNameEntryTouch(int tx, int ty) {
-  int keyW = 28;
-  int keyH = 28;
+  // Key size matches drawNameEntryScreen: 20px wide, 3px gap
+  int keyW = 20;
+  int keyH = 26;
   int startY = 65;
-  int gap = 4;
+  int gap = 3;
 
   const char* rows[3];
   if (kbPage == 0) {
@@ -1119,10 +1130,11 @@ void handleNameEntryTouch(int tx, int ty) {
     }
   }
 
-  int btnY = startY + 3 * (keyH + gap) + 5;
+  int bW = (SCREEN_W - 20) / 3;
+  int btnY = startY + 3 * (keyH + gap) + 6;
 
   // DEL button
-  if (isTouched(tx, ty, 10, btnY, 70, 30)) {
+  if (isTouched(tx, ty, 5, btnY, bW, 30)) {
     if (nameLen > 0) {
       nameBuffer[--nameLen] = '\0';
       drawNameEntryScreen();
@@ -1130,17 +1142,16 @@ void handleNameEntryTouch(int tx, int ty) {
     return;
   }
 
-  // Mode toggle (ABC/abc/123)
-  if (isTouched(tx, ty, 90, btnY, 70, 30)) {
+  // Mode toggle
+  if (isTouched(tx, ty, 5 + bW + 5, btnY, bW, 30)) {
     kbPage = (kbPage + 1) % 3;
     drawNameEntryScreen();
     return;
   }
 
-  // NEXT button — proceed to fingerprint enrollment
-  if (isTouched(tx, ty, 170, btnY, 140, 30)) {
+  // NEXT button
+  if (isTouched(tx, ty, 5 + 2*(bW + 5), btnY, bW + 5, 30)) {
     if (nameLen < 2) {
-      // Name too short
       tft.fillRoundRect(10, 30, SCREEN_W - 20, 28, 6, ERROR_COLOR);
       drawCenteredText("Name too short!", 38, TEXT_COLOR, 1);
       delay(1000);
@@ -1349,29 +1360,71 @@ void drawAdminSetupScreen() {
   tft.fillScreen(BG_COLOR);
   tft.fillRect(0, 0, SCREEN_W, 4, GOLD_COLOR);
 
-  drawCenteredText("FIRST TIME SETUP", 14, GOLD_COLOR, 2);
+  drawCenteredText("ADMIN SETUP", 14, GOLD_COLOR, 2);
   tft.drawFastHLine(30, 34, SCREEN_W - 60, DIVIDER_COLOR);
 
-  drawCenteredText("No admin registered!", 50, WARNING_COLOR, 1);
-  drawCenteredText("Register your admin", 75, TEXT_COLOR, 2);
-  drawCenteredText("fingerprint now", 97, TEXT_COLOR, 2);
+  // Admin name prominently shown
+  tft.fillRoundRect(20, 42, SCREEN_W - 40, 30, 8, CARD_COLOR);
+  tft.drawRoundRect(20, 42, SCREEN_W - 40, 30, 8, GOLD_COLOR);
+  drawCenteredText("Saurabh  [Admin]", 50, GOLD_COLOR, 1);
+
+  drawCenteredText("Place finger on sensor", 85, TEXT_COLOR, 2);
+  drawCenteredText("to register admin", 108, TEXT_COLOR, 2);
 
   // Fingerprint icon
   int cx = SCREEN_W / 2;
-  int cy = 150;
-  tft.drawCircle(cx, cy, 25, GOLD_COLOR);
-  tft.drawCircle(cx, cy, 23, GOLD_COLOR);
-  tft.fillCircle(cx, cy, 3, ACCENT_CYAN);
+  int cy = 165;
+  tft.drawCircle(cx, cy, 30, GOLD_COLOR);
+  tft.drawCircle(cx, cy, 28, GOLD_COLOR);
+  for (int i = -12; i <= 12; i += 5) {
+    int hw = sqrt(max(0, 16 * 16 - i * i));
+    tft.drawFastHLine(cx - hw, cy + i, hw * 2, TEXT_DIM);
+  }
+  tft.fillCircle(cx, cy, 4, ACCENT_CYAN);
 
-  drawCenteredText("Place finger on sensor", 190, TEXT_DIM, 1);
-  drawCenteredText("Hold steady...", 205, TEXT_MUTED, 1);
+  drawCenteredText("Hold steady...", 210, TEXT_MUTED, 1);
 }
 
 void enrollAdmin() {
+  // ── Step 0: Delete ALL previous fingerprints ─────────────────
+  // Exactly like the working reference code — clean slate for admin setup.
+  tft.fillScreen(TFT_BLACK);
+  tft.fillRect(0, 0, SCREEN_W, 4, GOLD_COLOR);
+  drawCenteredText("FIRST TIME SETUP", 14, GOLD_COLOR, 2);
+  drawCenteredText("Admin: Saurabh", 45, ACCENT_CYAN, 1);
+  drawCenteredText("Clearing sensor memory...", 70, WARNING_COLOR, 1);
+
+  Serial.println("ADMIN SETUP: Clearing all existing fingerprints...");
+
+  // Get template count and delete all
+  if (finger.getTemplateCount() == FINGERPRINT_OK) {
+    int total = finger.templateCount;
+    Serial.printf("  Found %d templates to delete\n", total);
+    // Delete slots 1-127 (covers all voter + admin slots)
+    for (int slot = 1; slot <= 127; slot++) {
+      finger.deleteModel(slot);
+      delay(30);
+    }
+    Serial.println("  All fingerprints cleared.");
+  }
+
+  // Also clear voters.json on server
+  HTTPClient hc;
+  hc.begin(serverUrl("/api/admin/reset-voters"));
+  hc.addHeader("Content-Type", "application/json");
+  hc.POST("{}");
+  hc.end();
+
+  // Confirm cleared
+  tft.fillRoundRect(20, 90, SCREEN_W - 40, 22, 6, CARD_COLOR);
+  drawCenteredText("Memory cleared!", 96, SUCCESS_COLOR, 1);
+  delay(800);
+
+  // ── Draw admin setup screen ────────────────────────────────────
   drawAdminSetupScreen();
   currentScreen = SCREEN_ADMIN_SETUP;
 
-  Serial.println("ADMIN SETUP: Enrolling admin fingerprint at slot 127");
+  Serial.println("ADMIN SETUP: Enrolling Saurabh fingerprint at slot 127");
 
   unsigned long startTime = millis();
   int p = -1;
@@ -1401,9 +1454,9 @@ void enrollAdmin() {
   // Step 2: Remove finger
   tft.fillScreen(BG_COLOR);
   tft.fillRect(0, 0, SCREEN_W, 4, GOLD_COLOR);
-  drawCenteredText("Step 1 captured!", 80, SUCCESS_COLOR, 2);
-  drawCenteredText("Remove finger, then", 120, TEXT_COLOR, 2);
-  drawCenteredText("place it again", 142, TEXT_COLOR, 2);
+  drawCenteredText("Step 1 OK!", 60, SUCCESS_COLOR, 2);
+  drawCenteredText("Remove finger now", 100, TEXT_COLOR, 2);
+  drawCenteredText("then place it again", 125, TEXT_DIM, 1);
 
   delay(1000);
   p = 0;
@@ -1417,6 +1470,7 @@ void enrollAdmin() {
   tft.fillRect(0, 0, SCREEN_W, 4, GOLD_COLOR);
   drawCenteredText("Place SAME finger", 80, TEXT_COLOR, 2);
   drawCenteredText("again on sensor", 105, TEXT_COLOR, 2);
+  drawCenteredText("[Saurabh - Admin]", 140, ACCENT_CYAN, 1);
 
   p = -1;
   startTime = millis();
@@ -1443,40 +1497,53 @@ void enrollAdmin() {
 
   p = finger.createModel();
   if (p != FINGERPRINT_OK) {
-    drawErrorScreen("Fingers did not match");
+    drawErrorScreen("Fingers did not match - try again");
     currentScreen = SCREEN_ERROR;
     return;
   }
 
-  p = finger.storeModel(ADMIN_FP_ID);
+  p = finger.storeModel(ADMIN_FP_ID);  // slot 127
   if (p != FINGERPRINT_OK) {
     drawErrorScreen("Storage failed");
     currentScreen = SCREEN_ERROR;
     return;
   }
 
-  // Success!
+  // ── Success! ─────────────────────────────────────────────────
   adminExists = true;
-  Serial.println("Admin fingerprint enrolled successfully!");
+  Serial.println("Admin fingerprint enrolled successfully! (Saurabh, slot 127)");
 
   tft.fillScreen(BG_COLOR);
   tft.fillRect(0, 0, SCREEN_W, 4, SUCCESS_COLOR);
 
-  tft.fillCircle(SCREEN_W / 2, 70, 28, SUCCESS_COLOR);
+  tft.fillCircle(SCREEN_W / 2, 65, 28, SUCCESS_COLOR);
+  tft.fillCircle(SCREEN_W / 2, 65, 24, BG_COLOR);
+  tft.fillCircle(SCREEN_W / 2, 65, 22, SUCCESS_COLOR);
   tft.setTextColor(BG_COLOR); tft.setTextSize(3);
-  tft.setCursor(SCREEN_W / 2 - 12, 57); tft.print("OK");
+  tft.setCursor(SCREEN_W / 2 - 12, 53); tft.print("OK");
 
-  drawCenteredText("ADMIN REGISTERED!", 115, SUCCESS_COLOR, 2);
-  drawCenteredText("You can now manage voters", 145, TEXT_DIM, 1);
-  drawCenteredText("by placing your finger", 160, TEXT_DIM, 1);
+  drawCenteredText("ADMIN REGISTERED!", 108, SUCCESS_COLOR, 2);
+  drawCenteredText("Welcome, Saurabh", 135, GOLD_COLOR, 2);
+  drawCenteredText("Place finger on sensor to", 165, TEXT_DIM, 1);
+  drawCenteredText("access Admin Panel", 180, TEXT_DIM, 1);
 
   delay(3000);
   resetForNewVoter();
 }
 
-// Check if admin fingerprint exists in sensor
+// Check if admin fingerprint is enrolled in the sensor.
+// Uses getTemplateCount + fingerFastSearch for reliability.
+// loadModel() is unreliable for existence checks — it loads to RAM buffer
+// regardless of whether the slot is occupied.
 bool checkAdminExists() {
+  // First check: does the sensor report any templates at all?
+  if (finger.getTemplateCount() != FINGERPRINT_OK) return false;
+  if (finger.templateCount == 0) return false;
+
+  // Second check: can we load the specific admin slot?
+  // Attempt to load model — OK means slot is populated
   uint8_t p = finger.loadModel(ADMIN_FP_ID);
+  Serial.printf("checkAdminExists: loadModel(127) returned %d (0=OK)\n", p);
   return (p == FINGERPRINT_OK);
 }
 
@@ -1572,18 +1639,35 @@ void drawEnrollDoneScreen(bool success, String msg) {
 //   Fingerprint Functions
 // ═══════════════════════════════════════════════════════════════
 
-void initFingerprint() {
-  fpSerial.begin(57600, SERIAL_8N1, FP_RX, FP_TX);
+// Auto-detect baud rate and initialise sensor.
+// Returns true if sensor responds, false otherwise.
+bool initFingerprint() {
+  // Exact pin order from verified working reference: (baud, config, RX_pin=17, TX_pin=16)
+  fpSerial.begin(57600, SERIAL_8N1, FP_RX_PIN, FP_TX_PIN);
   finger.begin(57600);
+  delay(200);
 
   if (finger.verifyPassword()) {
-    Serial.println("Fingerprint sensor found!");
-    Serial.print("Sensor capacity: ");
-    Serial.println(finger.capacity);
-  } else {
-    Serial.println("Fingerprint sensor NOT found!");
-    Serial.println("Check wiring: TX->GPIO16, RX->GPIO17");
+    Serial.println("Fingerprint sensor OK (57600 baud)");
+    Serial.print("Capacity: "); Serial.println(finger.capacity);
+    return true;
   }
+
+  // Fallback: try 9600 baud (some clone sensors)
+  fpSerial.end();
+  delay(100);
+  fpSerial.begin(9600, SERIAL_8N1, FP_RX_PIN, FP_TX_PIN);
+  finger.begin(9600);
+  delay(200);
+
+  if (finger.verifyPassword()) {
+    Serial.println("Fingerprint sensor OK (9600 baud)");
+    return true;
+  }
+
+  Serial.println("Fingerprint sensor NOT found!");
+  Serial.println("  Check wiring: Sensor TX -> GPIO17, Sensor RX -> GPIO16");
+  return false;
 }
 
 // Non-blocking fingerprint check — returns fingerprint ID or -1
@@ -2075,146 +2159,83 @@ void resetForNewVoter() {
 }
 
 void connectWiFi() {
-  tft.fillScreen(BG_COLOR);
-  tft.fillRect(0, 0, SCREEN_W, 4, PRIMARY_COLOR);
+  // Minimal boot: black screen, single status line.
+  // No titles or decorative elements that could bleed into home screen.
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(0x7BEF); tft.setTextSize(1);
+  tft.setCursor(10, 10);
+  tft.print("Connecting WiFi...");
 
-  drawCenteredText("SECURE E-VOTE", 25, PRIMARY_COLOR, 2);
-  tft.drawFastHLine(40, 45, SCREEN_W - 80, DIVIDER_COLOR);
-  drawCenteredText("Initializing System...", 55, TEXT_DIM, 1);
-
-  // WiFi connection
-  tft.fillRoundRect(20, 75, SCREEN_W - 40, 35, 8, CARD_COLOR);
-  tft.setTextSize(1);
-  tft.setTextColor(TEXT_MUTED);
-  tft.setCursor(30, 80);
-  tft.print("WiFi: ");
-  tft.setTextColor(ACCENT_CYAN);
-  tft.print(WIFI_SSID);
-  tft.setTextColor(TEXT_MUTED);
-  tft.setCursor(30, 95);
-  tft.print("Connecting");
-
-  // Force station mode and clear any stale connections
   WiFi.mode(WIFI_STA);
   WiFi.disconnect(true);
-  delay(500);
+  delay(300);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.printf("WiFi: %s\n", WIFI_SSID);
 
-  Serial.printf("Connecting to WiFi: %s\n", WIFI_SSID);
-  Serial.println("NOTE: ESP32 only supports 2.4GHz WiFi!");
+  unsigned long t0 = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - t0 < 20000) {
+    delay(500);
+    Serial.print(".");
+  }
 
-  int maxAttempts = 3;
-  bool connected = false;
-
-  for (int attempt = 1; attempt <= maxAttempts && !connected; attempt++) {
-    Serial.printf("Attempt %d/%d...\n", attempt, maxAttempts);
-
+  if (WiFi.status() != WL_CONNECTED) {
+    // Try once more
+    WiFi.disconnect(true); delay(500);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-    // Wait up to 15 seconds per attempt
-    unsigned long startAttempt = millis();
-    int dots = 0;
-
-    while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 15000) {
-      delay(500);
-      Serial.printf("  WiFi status: %d\n", WiFi.status());
-      tft.setCursor(90 + dots * 6, 95);
-      tft.setTextColor(PRIMARY_COLOR);
-      tft.print(".");
-      dots++;
-      if (dots > 18) {
-        dots = 0;
-        tft.fillRect(90, 95, 130, 10, CARD_COLOR);
-      }
-    }
-
-    if (WiFi.status() == WL_CONNECTED) {
-      connected = true;
-    } else {
-      Serial.printf("  Attempt %d failed. Status: %d\n", attempt, WiFi.status());
-      WiFi.disconnect(true);
-      delay(1000);
-
-      // Show retry on screen
-      tft.fillRect(30, 95, 250, 10, CARD_COLOR);
-      tft.setCursor(30, 95);
-      tft.setTextColor(WARNING_COLOR);
-      String retryMsg = "Retry " + String(attempt) + "/" + String(maxAttempts) + "...";
-      tft.print(retryMsg.c_str());
-    }
+    t0 = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - t0 < 10000) delay(500);
   }
 
-  if (!connected) {
-    Serial.println("WiFi FAILED after all attempts!");
-    Serial.println("Check: SSID, password, and 2.4GHz band");
-
-    tft.fillRoundRect(20, 75, SCREEN_W - 40, 50, 8, CARD_COLOR);
-    tft.drawRoundRect(20, 75, SCREEN_W - 40, 50, 8, ERROR_COLOR);
-    tft.setTextColor(ERROR_COLOR);
-    tft.setCursor(30, 80);
-    tft.print("WiFi FAILED!");
-    tft.setTextColor(TEXT_DIM);
-    tft.setCursor(30, 95);
-    tft.print("Check SSID/password");
-    tft.setCursor(30, 108);
-    tft.setTextColor(WARNING_COLOR);
-    tft.print("ESP32 = 2.4GHz ONLY!");
-
-    drawCenteredText("Rebooting in 5s...", 145, TEXT_MUTED, 1);
-    delay(5000);
-    ESP.restart();
-    return;
-  }
-
-  // Connected!
-  Serial.printf("WiFi connected! IP: %s\n", WiFi.localIP().toString().c_str());
-
-  tft.fillRoundRect(20, 75, SCREEN_W - 40, 35, 8, CARD_COLOR);
-  tft.drawRoundRect(20, 75, SCREEN_W - 40, 35, 8, SUCCESS_COLOR);
-  tft.setTextSize(1);
-  tft.setTextColor(SUCCESS_COLOR);
-  tft.setCursor(30, 80);
-  tft.print("WiFi Connected!");
-  tft.setTextColor(TEXT_DIM);
-  tft.setCursor(30, 95);
-  tft.print("IP: ");
-  tft.setTextColor(TEXT_COLOR);
-  tft.print(WiFi.localIP().toString().c_str());
-
-  // Server info
-  tft.fillRoundRect(20, 120, SCREEN_W - 40, 25, 8, CARD_COLOR);
-  tft.setTextSize(1);
-  tft.setTextColor(TEXT_MUTED);
-  tft.setCursor(30, 128);
-  tft.print("Server: ");
-  tft.setTextColor(ACCENT_CYAN);
-  tft.print(SERVER_IP);
-  tft.print(":");
-  tft.print(SERVER_PORT);
-
-  // Fingerprint sensor init
-  tft.fillRoundRect(20, 155, SCREEN_W - 40, 25, 8, CARD_COLOR);
-  drawCenteredText("Init fingerprint sensor...", 162, TEXT_DIM, 1);
-  initFingerprint();
-
-  if (finger.verifyPassword()) {
-    fpSensorConnected = true;
-    finger.getTemplateCount();
-    tft.fillRoundRect(20, 155, SCREEN_W - 40, 25, 8, CARD_COLOR);
-    tft.drawRoundRect(20, 155, SCREEN_W - 40, 25, 8, SUCCESS_COLOR);
-    drawCenteredText("Fingerprint: OK", 162, SUCCESS_COLOR, 1);
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf("\nWiFi OK: %s\n", WiFi.localIP().toString().c_str());
+    tft.fillRect(0, 0, SCREEN_W, 20, TFT_BLACK);
+    tft.setTextColor(0x07E0); tft.setTextSize(1);
+    tft.setCursor(10, 10);
+    tft.print("WiFi OK: ");
+    tft.print(WiFi.localIP().toString().c_str());
   } else {
-    fpSensorConnected = false;
-    tft.fillRoundRect(20, 155, SCREEN_W - 40, 25, 8, CARD_COLOR);
-    tft.drawRoundRect(20, 155, SCREEN_W - 40, 25, 8, ERROR_COLOR);
-    drawCenteredText("Fingerprint: FAIL", 162, ERROR_COLOR, 1);
+    Serial.println("\nWiFi FAILED. Continuing offline.");
+    tft.fillRect(0, 0, SCREEN_W, 20, TFT_BLACK);
+    tft.setTextColor(0xF800); tft.setTextSize(1);
+    tft.setCursor(10, 10);
+    tft.print("WiFi FAILED - offline mode");
   }
 
-  // System ready
-  tft.fillRoundRect(40, 195, SCREEN_W - 80, 30, 8, SUCCESS_COLOR);
-  drawCenteredText("SYSTEM READY", 203, TEXT_COLOR, 2);
+  // Init fingerprint sensor (Serial only, no display)
+  tft.fillRect(0, 20, SCREEN_W, 10, TFT_BLACK);
+  tft.setTextColor(0x7BEF); tft.setTextSize(1);
+  tft.setCursor(10, 22);
+  tft.print("Init fingerprint...");
 
-  delay(2000);
+  if (!SIMULATE_FINGERPRINT) {
+    if (initFingerprint()) {
+      fpSensorConnected = true;
+      finger.getTemplateCount();
+      Serial.printf("FP OK (%d templates)\n", finger.templateCount);
+      tft.fillRect(0, 20, SCREEN_W, 10, TFT_BLACK);
+      tft.setTextColor(0x07E0); tft.setCursor(10, 22);
+      tft.print("FP sensor OK");
+    } else {
+      fpSensorConnected = false;
+      Serial.println("FP sensor NOT found");
+      tft.fillRect(0, 20, SCREEN_W, 10, TFT_BLACK);
+      tft.setTextColor(0xFD20); tft.setCursor(10, 22);
+      tft.print("FP: not found");
+    }
+  } else {
+    fpSensorConnected = true;
+    tft.fillRect(0, 20, SCREEN_W, 10, TFT_BLACK);
+    tft.setTextColor(0xFD20); tft.setCursor(10, 22);
+    tft.print("FP: SIM mode");
+  }
+
+  delay(800);
+
+  // CLEAR SCREEN COMPLETELY before returning — mandatory
+  tft.fillScreen(TFT_BLACK);
 }
+
+
 
 // ═══════════════════════════════════════════════════════════════
 //   HEARTBEAT — Send device status to server
@@ -2298,61 +2319,52 @@ void setup() {
   Serial.println("\n=== Blockchain Voting System (Fingerprint Auth) ===\n");
 
   if (SIMULATE_FINGERPRINT) {
-    Serial.println("*** SIMULATION MODE ENABLED — Fingerprint sensor bypassed ***");
+    Serial.println("*** SIMULATION MODE — Fingerprint sensor bypassed ***");
   }
 
-  // Init display — clean start
+  // ── Display init ───────────────────────────────────────────────
   tft.init();
-  tft.writecommand(0x28);  // Display OFF during setup
+  tft.setRotation(2);   // Portrait 240x320
 
-  // Clear display RAM in all rotations to prevent ghosting
-  for (uint8_t r = 0; r < 4; r++) {
-    tft.setRotation(r);
-    tft.fillScreen(TFT_BLACK);
-  }
-
-  // Set landscape rotation — rotated 90° right from rotation 1
-  tft.setRotation(2);  // 90° right from previous
-  tft.fillScreen(BG_COLOR);
-
-  tft.writecommand(0x29);  // Display ON
-  delay(50);
-
-  // Touch calibration for rotation 2
-  uint16_t calData[5] = {300, 3600, 300, 3600, 3};
+  // ── Touch calibration values (verified from working reference code) ──
+  // { xMin, xMax, yMin, yMax, rotation_flag }
+  // These are hardware-specific values for this display panel.
+  // If touch feels off after replacing display hardware, run:
+  //   File -> Examples -> TFT_eSPI -> Generic -> Touch_calibrate
+  uint16_t calData[5] = { 379, 3363, 226, 3449, 4 };
   tft.setTouch(calData);
+  Serial.println("Touch calibrated with proven values {379,3363,226,3449,4}");
 
-  // Touch diagnostic — test if XPT2046 is responding
-  Serial.println("Testing touch controller...");
-  pinMode(21, OUTPUT);    // TOUCH_CS
-  digitalWrite(21, LOW);  // Select touch chip
-  delay(1);
-  digitalWrite(21, HIGH); // Deselect
-  Serial.println("TOUCH_CS pin 21 toggled. If touch works, you'll see coordinates in Serial Monitor.");
+  tft.fillScreen(TFT_BLACK);
+  delay(100);
 
-
-  // Connect WiFi
+  // ── Connect WiFi + init fingerprint sensor ─────────────────────
   connectWiFi();
 
+  // ── Admin fingerprint check ────────────────────────────────────
   if (!SIMULATE_FINGERPRINT) {
-    // Check if admin fingerprint exists
     adminExists = checkAdminExists();
-    Serial.printf("Admin fingerprint: %s\n", adminExists ? "EXISTS" : "NOT FOUND");
-
     if (!adminExists) {
-      Serial.println("No admin found! Starting admin setup...");
+      Serial.println("No admin fingerprint found - starting admin enrollment...");
       enrollAdmin();
       return;
     }
+    Serial.println("Admin fingerprint: OK");
   } else {
     adminExists = true;
-    Serial.println("SIM MODE: Admin setup skipped");
+    Serial.println("SIM MODE: Admin bypassed");
   }
 
-  // Show Home Screen
+  // ── Launch home screen (full clear first to prevent startup splash bleed) ──
+  tft.fillScreen(TFT_BLACK);
+  delay(50);
   currentScreen = SCREEN_HOME;
   drawHomeScreen();
 }
+
+
+
+
 
 unsigned long lastTouchTime = 0;
 const unsigned long DEBOUNCE_MS = 250;
@@ -2397,6 +2409,15 @@ void loop() {
     sendHeartbeat();
   }
 
+  // ─── Poll server for enrollment requests on ALL screens ───
+  // (Admin can trigger from browser regardless of what's on screen)
+  if (currentScreen == SCREEN_HOME ||
+      currentScreen == SCREEN_FINGERPRINT ||
+      currentScreen == SCREEN_CANDIDATES ||
+      currentScreen == SCREEN_RESULT) {
+    pollServerForEnrollment();
+  }
+
   // ─── Auto-return from error/already-voted screens ───
   if (currentScreen == SCREEN_ERROR || currentScreen == SCREEN_ALREADY_VOTED) {
     if (millis() - errorShownTime > ERROR_DISPLAY_MS) {
@@ -2411,9 +2432,7 @@ void loop() {
     if (!SIMULATE_FINGERPRINT) {
       animateFingerprintPulse();
     }
-
-    // Poll server for browser-triggered enrollments
-    pollServerForEnrollment();
+    // (enrollment polling is handled globally at top of loop)
 
     if (SIMULATE_FINGERPRINT) {
       // SIM MODE: Handle touch buttons on fingerprint screen
@@ -2425,14 +2444,18 @@ void loop() {
 
         Serial.printf("SIM Touch: x=%d, y=%d\n", stx, sty);
 
-        // "SIM VOTER" button (left)
-        if (isTouched(stx, sty, 10, 180, 145, 30)) {
+        // "SIM VOTER" button — matches drawFingerprintScreen SIM layout
+        int sbtnW = 110;
+        int sbtnLeftX  = (SCREEN_W/2) - sbtnW - 5;  // left button x
+        int sbtnRightX = (SCREEN_W/2) + 5;           // right button x
+        int sbtnY = 198;
+        if (isTouched(stx, sty, sbtnLeftX, sbtnY, sbtnW, 32)) {
           Serial.println("SIM: Voter fingerprint (ID 1)");
           authenticateFingerprint(1);
           return;
         }
         // "SIM ADMIN" button (right)
-        if (isTouched(stx, sty, 165, 180, 145, 30)) {
+        if (isTouched(stx, sty, sbtnRightX, sbtnY, sbtnW, 32)) {
           Serial.println("SIM: Admin authenticated");
           currentScreen = SCREEN_ADMIN_MENU;
           drawAdminMenu();
